@@ -1,12 +1,12 @@
 # Repo Governance — What Lives Where
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** 01 March 2026
-**Previous Version:** N/A — initial version
+**Previous Version:** 1.0 (01 March 2026) — initial version
 **Maintained by:** Alex
 
-### Key Changes
-- Initial creation. Establishes the `kalpa-docs` repo pattern and defines what documentation lives in service repos vs. the umbrella docs repo.
+### Key Changes v1.0 → v1.1
+- Added §4.4: Branch strategy for documentation changes in service repos — docs-only PRs target `main` directly, bypassing develop/staging.
 
 ---
 
@@ -138,6 +138,21 @@ This service is the WellMed API Gateway. For system-wide architecture, see:
 
 4.3.3 ADRs are always created in `kalpa-docs/adrs/` even if the decision primarily affects one service, because architectural decisions have system-wide implications and should be discoverable in one place.
 
+## 4.4 Branch Strategy for Documentation Changes in Service Repos
+
+4.4.1 Documentation changes in service repos do not need to travel through `develop` → `staging` → `main`. README and `docs/` updates PR **directly to `main`** from a `docs/*` branch.
+
+4.4.2 **The rule:**
+
+| Change type | Branch strategy |
+|-------------|----------------|
+| `README.md` or `docs/*.md` only — no code changed | `docs/<slug>` → PR to `main` directly (Green level) |
+| Code change with coupled doc update | Doc travels with the code PR through normal flow (`develop` → `staging` → `main`) |
+
+4.4.3 **Rationale.** A README describes what the repo *is*, not what is deployed to a specific environment. Routing docs through `develop` and `staging` creates three stale copies of the same content with no benefit. The exception is docs that are tightly coupled to unreleased code — those should travel with the code so they go live together.
+
+4.4.4 **GitHub branch protection note.** Branch protection rules cannot distinguish docs-only from code changes. This convention is enforced by review, not by automation. The existing protection on `main` (PR required + CI passing) still applies — this rule only clarifies *which branch to target*, not that the PR gate is bypassed.
+
 ---
 
 # 5. Maintenance
@@ -190,3 +205,4 @@ This service is the WellMed API Gateway. For system-wide architecture, see:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 01 Mar 2026 | Alex + Claude | Initial creation. Establishes kalpa-docs repo pattern, defines what lives where, provides migration path from current doc state. |
+| 1.1 | 01 Mar 2026 | Alex + Claude | Added §4.4: branch strategy for docs-only changes in service repos (docs/* → main directly). |
