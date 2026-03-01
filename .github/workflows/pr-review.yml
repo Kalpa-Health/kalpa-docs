@@ -1,0 +1,157 @@
+# Claude PR Review — kalpa-docs
+#
+# Posts an AI-generated review on every PR to main.
+# Focused on doc quality, consistency, format compliance, and cross-references.
+# Review language: Indonesian (technical terms in English).
+#
+# Required secret: ANTHROPIC_API_KEY
+
+name: Claude PR Review
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+
+jobs:
+  claude-review:
+    name: Claude PR Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD -- '*.md' '*.mermaid' | head -n 8000 > /tmp/pr_diff.txt
+
+      - name: Claude doc review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          TEMPLATE="Kamu adalah technical writer yang mereview perubahan dokumentasi untuk kalpa-docs — repositori dokumentasi sistem WellMed (platform SaaS klinik kesehatan Indonesia).
+
+          ## Konteks kalpa-docs
+          - Repo ini berisi dokumentasi lintas-service: arsitektur sistem, ADR, strategi testing, runbook operasional
+          - Tidak ada kode aplikasi di sini — hanya markdown, mermaid diagram, dan ADR
+          - Standar dokumen: heading bernomor (1 / 1.1 / 1.1.1), tabel versi di atas, edit log di bawah
+          - ADR mengikuti format ADR-000-template.md
+          - Lihat repo-governance.md untuk aturan apa yang boleh ada di kalpa-docs vs service repo
+
+          ## PR yang Direview
+          Judul: TITLE_PLACEHOLDER
+          Deskripsi: BODY_PLACEHOLDER
+
+          ## Diff
+          DIFF_PLACEHOLDER
+
+          ## Instruksi Review
+          Tulis review dalam Bahasa Indonesia (istilah teknis boleh Inggris). Format:
+
+          ### Ringkasan
+          2-3 kalimat: apa yang dilakukan PR ini.
+
+          ### Kualitas Dokumentasi: [HIJAU / KUNING / MERAH]
+          - HIJAU: konten jelas, format benar, cross-reference akurat
+          - KUNING: ada bagian yang membingungkan, format tidak konsisten, atau link perlu dicek
+          - MERAH: konten tidak akurat, bertentangan dengan dokumen lain, atau melanggar governance
+
+          ### Temuan
+          Untuk setiap temuan (max 5):
+          - [file:bagian] Deskripsi masalah atau catatan.
+
+          Periksa secara khusus:
+          - Nomor versi diincrement di header dokumen
+          - Edit log diupdate di bagian bawah dokumen
+          - Format heading bernomor (1 / 1.1 / 1.1.1) digunakan
+          - Cross-reference ke dokumen lain akurat
+          - Konten yang seharusnya di service repo tidak masuk ke kalpa-docs (lihat repo-governance.md §4)
+          - Format ADR mengikuti ADR-000-template.md (jika berlaku)
+
+          Jika tidak ada temuan: tulis Tidak ada temuan signifikan.
+
+          ### Rekomendasi
+          Bullet points singkat (max 3). Jika tidak ada: Siap untuk merge.
+
+          ### Update Service Repo Diperlukan?
+          Apakah ada service repo (misal wellmed-gateway-go) yang juga perlu diupdate setelah perubahan ini? Ya / Tidak dan alasan singkat.
+
+          Jangan tulis apapun di luar format di atas."
+
+          PROMPT=$(jq -rn \
+            --arg template "$TEMPLATE" \
+            --arg title "$PR_TITLE" \
+            --arg body "$PR_BODY" \
+            --rawfile diff /tmp/pr_diff.txt \
+            '$template | gsub("TITLE_PLACEHOLDER"; $title) | gsub("BODY_PLACEHOLDER"; $body) | gsub("DIFF_PLACEHOLDER"; $diff)')
+
+          echo "$PROMPT" > /tmp/claude_prompt.txt
+          jq -n \
+            --rawfile content /tmp/claude_prompt.txt \
+            '{
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 1024,
+              messages: [{ role: "user", content: $content }]
+            }' > /tmp/claude_payload.json
+
+          RESPONSE=$(curl -sf https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @/tmp/claude_payload.json)
+
+          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // "Claude review tidak tersedia."')
+
+          echo "review<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$REVIEW_TEXT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post review comment
+        uses: actions/github-script@v7
+        env:
+          REVIEW_TEXT: ${{ steps.review.outputs.review }}
+        with:
+          script: |
+            const reviewText = process.env.REVIEW_TEXT;
+
+            const body = [
+              '## 🤖 Claude Doc Review',
+              '',
+              '> Review otomatis oleh Claude. Bukan pengganti review manusia.',
+              '',
+              reviewText,
+            ].join('\n');
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            for (const comment of comments.data) {
+              if (comment.user.login === 'github-actions[bot]' &&
+                  comment.body.includes('Claude Doc Review')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
