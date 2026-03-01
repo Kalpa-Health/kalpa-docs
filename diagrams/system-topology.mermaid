@@ -1,0 +1,64 @@
+%% WellMed System Topology — High-Level Request Flow
+%% Source: wellmed-system-architecture.md §2.1
+%% Last updated: 01 March 2026
+
+flowchart TD
+    subgraph External["External World"]
+        Browser["Browser / Mobile"]
+        GovAPIs["Government APIs\n(SATU SEHAT, P-Care, Mobile JKN)"]
+        BizAPIs["Business APIs\n(Xendit, Jurnal, Xero, Talenta, Zoho, Kyoo)"]
+    end
+
+    subgraph Edge["Edge Layer"]
+        WFE["WellMed Frontend\n(Nuxt.js SPA)"]
+        HFE["HQ Frontend\n(Nuxt.js SPA)"]
+        WBFF["WellMed BFF\n(Nitro)"]
+        HBFF["HQ BFF\n(Nitro)"]
+        GW["Gateway Service\n(Go / Fiber v3)"]
+    end
+
+    subgraph Internal["Internal Microservices"]
+        BB["Backbone"]
+        EMR["EMR"]
+        CASH["Cashier"]
+        RPT["Reporting"]
+        APT["Appointment"]
+        SS["SATU SEHAT\nIntegration"]
+        BPJS["BPJS\nIntegration"]
+        PHARM["Pharmacy"]
+        LAB["Lab"]
+        RAD["Radiology"]
+        OP["Outpatient"]
+        HQ["HQ Service"]
+    end
+
+    subgraph Data["Data Layer"]
+        PG["PostgreSQL\n(per-tenant DBs)"]
+        Redis["Redis\n(session + cache)"]
+        RMQ["RabbitMQ\n(async messaging)"]
+        ES["ElasticSearch\n(search + analytics)"]
+    end
+
+    Browser -->|HTTPS| WFE
+    Browser -->|HTTPS| HFE
+    WFE --> WBFF
+    HFE --> HBFF
+    WBFF -->|REST| GW
+    HBFF -->|REST| GW
+
+    GW -->|"gRPC\n(currently all via Backbone;\ntarget: direct per-service)"| BB
+    GW -.->|"gRPC (target)"| EMR
+    GW -.->|"gRPC (target)"| CASH
+    GW -.->|"gRPC (target)"| PHARM
+
+    BB --> PG
+    BB --> Redis
+    EMR --> PG
+    CASH --> PG
+    SS -->|REST| GovAPIs
+    BPJS -->|REST| GovAPIs
+
+    Internal -->|async| RMQ
+    RMQ -->|async| SS
+    RMQ -->|async| BPJS
+    Internal --> ES
