@@ -1,12 +1,14 @@
 # Repo Governance — What Lives Where
 
-**Version:** 1.1
-**Date:** 01 March 2026
-**Previous Version:** 1.0 (01 March 2026) — initial version
+**Version:** 1.2
+**Date:** 02 March 2026
+**Previous Version:** 1.1 (01 March 2026) — added §4.4 docs-only branch strategy
 **Maintained by:** Alex
 
-### Key Changes v1.0 → v1.1
-- Added §4.4: Branch strategy for documentation changes in service repos — docs-only PRs target `main` directly, bypassing develop/staging.
+### Key Changes v1.1 → v1.2
+- Added §3.3: `wellmed-infrastructure` repo — defines infrastructure as a first-class repo type alongside docs and service repos.
+- Updated §4.1 decision matrix to include infrastructure tooling row.
+- Added §4.5: Infrastructure repo governance — when changes to templates and scripts require review.
 
 ---
 
@@ -67,7 +69,37 @@ kalpa-docs/
     └── system-topology.mermaid
 ```
 
-## 3.2 Service Repos (e.g., `kalpa-gateway`)
+## 3.2 `wellmed-infrastructure` Repo
+
+```
+wellmed-infrastructure/
+├── HOW-TO.md                          # How to use the bootstrap script (start here)
+├── README.md                          # Repo overview
+│
+├── scripts/                           # Operational scripts (run manually or via CI)
+│   ├── bootstrap-repo.sh              # Bootstraps a new repo to org standard
+│   ├── create-iam-resources.sh        # AWS IAM setup
+│   ├── install-cloudwatch-agent.sh
+│   └── install-xray-daemon.sh
+│
+├── templates/                         # Source-of-truth templates applied by scripts
+│   └── workflows/                     # GitHub Actions workflow templates
+│       ├── ci.yml
+│       ├── main-approval-check.yml
+│       └── pr-review.yml
+│
+├── iam/                               # AWS IAM policy and role definitions
+│   ├── policies/
+│   └── roles/
+│
+└── cloudwatch/                        # CloudWatch agent configuration
+```
+
+3.2.1 This repo is the source of truth for anything that applies uniformly across all service repos: CI templates, branch protection standards, AWS instance configuration. If the CI standard changes, the template changes here, and `bootstrap-repo.sh` re-applies it.
+
+3.2.2 The `wellmed-infrastructure` repo is currently a local folder (`infrastructure/`) pending creation as a standalone GitHub repo. See `HOW-TO.md §7` for the pending actions.
+
+## 3.3 Service Repos (e.g., `kalpa-gateway`)
 
 ```
 kalpa-gateway/
@@ -108,10 +140,13 @@ kalpa-gateway/
 | Cross-service working doc / decisions | `kalpa-docs` | Affects multiple teams |
 | Operational runbooks | `kalpa-docs/operations/` | Not tied to one service |
 | Developer setup guide | `kalpa-docs/development/` | Applies across repos |
+| CI workflow templates | `wellmed-infrastructure/templates/` | Applied to all service repos |
+| AWS / infra configuration | `wellmed-infrastructure/` | Not tied to one service's code |
+| Bootstrap and setup scripts | `wellmed-infrastructure/scripts/` | Operate across repos, not within one |
 | Service README | Service repo | Specific to that service |
 | Service PLAN.md | Service repo | Execution plan for that service |
 | Service-specific docs (modules, middleware, etc.) | Service repo `/docs/` | Too granular for umbrella |
-| CI/CD workflows (`.github/`) | Service repo | Runs against that service's code |
+| CI/CD workflows (`.github/`) | Service repo | Runs against that service's code (generated from templates) |
 | Makefile | Service repo | Builds that service |
 | Test files (`*_test.go`) | Service repo | Tests that service's code |
 
@@ -137,6 +172,16 @@ This service is the WellMed API Gateway. For system-wide architecture, see:
 4.3.2 If the information is specific to one service's internals, it stays in that service repo. The service's `/docs/` folder is the right place.
 
 4.3.3 ADRs are always created in `kalpa-docs/adrs/` even if the decision primarily affects one service, because architectural decisions have system-wide implications and should be discoverable in one place.
+
+## 4.5 Infrastructure Repo Governance
+
+4.5.1 Changes to `wellmed-infrastructure` templates affect every repo that gets bootstrapped afterward. Treat template changes as Yellow-level: they require at least one reviewer before merge, even if the CI check is green.
+
+4.5.2 The `bootstrap-repo.sh` script is idempotent — re-running it against an existing repo updates workflow files and overwrites protection rules. This is intentional and safe, but running it against production repos should be a deliberate action, not an accident. The `--dry-run` flag exists for this reason.
+
+4.5.3 When Go version or approval count standards change org-wide, update the template in `wellmed-infrastructure`, document the change in its edit log, and schedule a re-bootstrap pass across all active repos.
+
+---
 
 ## 4.4 Branch Strategy for Documentation Changes in Service Repos
 
@@ -206,3 +251,4 @@ This service is the WellMed API Gateway. For system-wide architecture, see:
 |---------|------|--------|---------|
 | 1.0 | 01 Mar 2026 | Alex + Claude | Initial creation. Establishes kalpa-docs repo pattern, defines what lives where, provides migration path from current doc state. |
 | 1.1 | 01 Mar 2026 | Alex + Claude | Added §4.4: branch strategy for docs-only changes in service repos (docs/* → main directly). |
+| 1.2 | 02 Mar 2026 | Alex + Claude | Added §3.2 wellmed-infrastructure repo (structure, purpose, pending GitHub creation). Added §4.5 infrastructure repo governance. Updated §4.1 decision matrix with infrastructure rows. |

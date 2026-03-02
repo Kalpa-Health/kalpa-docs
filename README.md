@@ -1,7 +1,7 @@
 # kalpa-docs
 
 **Maintained by:** Kalpa Inovasi Digital engineering team
-**Last updated:** 01 March 2026
+**Last updated:** 02 March 2026
 
 Cross-service documentation for the WellMed platform. This repo contains no application code — only markdown documents, diagrams, and ADRs.
 
@@ -69,11 +69,25 @@ Per-service overview documents (authored here, linked from service repos).
 | [`development/setup.md`](development/setup.md) | Local development environment setup |
 | [`development/conventions.md`](development/conventions.md) | Code conventions, naming, project structure |
 | [`development/testing-patterns.md`](development/testing-patterns.md) | How to write tests (quick reference with examples) |
-| [`development/ci-cd-guide.md`](development/ci-cd-guide.md) | GitHub Actions workflows explained |
+| [`development/ci-cd-guide.md`](development/ci-cd-guide.md) | GitHub Actions workflows explained, new repo bootstrap |
 
 ---
 
-## 7. Diagrams
+## 7. Infrastructure & Tooling
+
+Infrastructure configuration and org-wide scripts live in `wellmed-infrastructure` (currently `infrastructure/` locally, pending GitHub repo creation).
+
+| Resource | What it covers |
+|----------|----------------|
+| [`HOW-TO.md`](https://github.com/Kalpa-Health/wellmed-infrastructure/blob/main/HOW-TO.md) | How to bootstrap a new repo to org standard (start here) |
+| `scripts/bootstrap-repo.sh` | Creates branches, pushes CI workflows, applies branch protection |
+| `templates/workflows/` | Source-of-truth CI workflow templates for all service repos |
+
+For governance rules on what lives in infrastructure vs service repos vs kalpa-docs, see [`repo-governance.md §3.2`](repo-governance.md).
+
+---
+
+## 8. Diagrams
 
 | File | What it shows |
 |------|--------------|
@@ -81,6 +95,6 @@ Per-service overview documents (authored here, linked from service repos).
 
 ---
 
-## 8. Archive
+## 9. Archive
 
 [`archive/`](archive/) contains superseded document versions kept for historical reference. Do not link to archive documents from new content — link to the canonical versions above instead.
