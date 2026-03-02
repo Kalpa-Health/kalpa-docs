@@ -1,7 +1,7 @@
 # Briefing Tim — Kalpa Engineering: Dokumentasi, CI/CD & Standar Repo
 
 **Tanggal**: Maret 2026
-**Durasi meeting**: ~60 menit
+**Durasi meeting**: ~75 menit
 **Penyaji**: Alex
 
 ---
@@ -26,7 +26,26 @@ Selama beberapa minggu terakhir, kami melakukan **audit teknis menyeluruh** terh
 
 Sebelumnya: **1 test file, 9 tests, tidak ada CI, tidak ada dokumentasi**.
 
-### 1.2 Infrastruktur Org — Standar Baru
+### 1.2 Integration Auth Layer — Gateway Phase 1 & Backbone Phase 2
+
+Ini adalah fitur baru pertama yang dibangun di atas infrastruktur standar yang baru. Konteks: Jurnal.id (sistem akuntansi Mekari) mengirim webhook ke WellMed saat transaksi diposting. Gateway perlu memverifikasi bahwa webhook itu asli — menggunakan HMAC-SHA256 signature — tanpa menyimpan kredensial sendiri.
+
+| Deliverable | Detail |
+|-------------|--------|
+| **Gateway PR #5** — webhook HMAC verification | Middleware verifikasi signature Jurnal.id inbound. Caching config per-tenant di Redis (15 menit). Menunggu backbone PR #1 sebelum bisa merge. |
+| **Backbone PR #1** — `IntegrationService` gRPC | Endpoint baru `GetTenantIntegrationConfig` — backbone mengambil kredensial dari AWS SSM Parameter Store dan mengembalikan ke gateway. Cache Redis 15 menit di sisi backbone juga. |
+| **`apiclient` package** | Klien HTTP authenticated untuk tiga integrasi: Claude (API key), SATU SEHAT (OAuth), Jurnal.id (HMAC outbound signing). |
+| **Service-key auth** | Panggilan gateway → backbone untuk endpoint ini menggunakan `x-service-key` header (bukan JWT user) — defence-in-depth di samping SG network controls. |
+| **AWS Security Groups** | Port 50051 (gRPC backbone) sudah dikonfigurasi — lihat §5.1 di bawah. |
+
+**Urutan merge yang benar:**
+```
+Backbone PR #1 merge ke develop dulu
+→ Backbone deploy ke dev
+→ Gateway PR #5 bisa di-approve dan merge
+```
+
+### 1.3 Infrastruktur Org — Standar Baru
 
 | Deliverable | Detail |
 |-------------|--------|
@@ -152,6 +171,9 @@ git push origin feature/nama-fitur
 - [x] `ANTHROPIC_API_KEY` dikonfigurasi di GitHub Secrets (gateway)
 - [x] `wellmed-infrastructure` repo dibuat — bootstrap tooling tersedia
 - [x] `wellmed-backbone` di-bootstrap sesuai standar org
+- [x] Integration auth layer Phase 2 dibangun di backbone (PR #1 dibuka)
+- [x] SG port 50051 dikonfigurasi — prod dan dev/staging (lihat §5.1)
+- [ ] Set `BACKBONE_SERVICE_KEY` di ECS task definitions backbone + gateway (nilai sama, generate: `openssl rand -hex 32`)
 
 ---
 
@@ -165,18 +187,44 @@ git push origin feature/nama-fitur
 
 ---
 
+## 5.1 AWS Infrastructure — Port 50051 (gRPC Backbone)
+
+Ini sudah dikonfigurasi. Catatan untuk referensi tim dan onboarding environment baru.
+
+| Environment | SG Rule | Status |
+|-------------|---------|--------|
+| **Production** | Gateway fe SG → Backbone app SG, port 50051 inbound | ✅ Done |
+| **Dev / Staging** | Gateway fe SG → Backbone dev-app SG, port 50051 inbound | ✅ Done |
+| **Staging Backbone** *(belum ada)* | Perlu ditambah saat staging app backbone dibuat | ⏳ Future |
+
+> **Catatan untuk saat staging backbone app ditambah:** Cukup clone konfigurasi SG dari dev-app backbone, lalu tambah satu inbound rule port 50051 source = staging gateway fe SG. Tidak ada yang lain yang perlu diubah di sisi infrastruktur.
+
+---
+
 ## 6. PR Terbuka untuk Didiskusikan
 
-**PR #5 — Webhook Integration (feature/webhook-integration → develop)**
+### Backbone PR #1 ← **Baru, perlu review & merge duluan**
+**`feature/integration-auth-layer` → `develop`**
+👉 https://github.com/Kalpa-Health/wellmed-backbone/pull/1
+
+| Topik | Detail |
+|-------|--------|
+| **`IntegrationService` gRPC** | Endpoint baru untuk gateway. Ambil kredensial dari SSM, cache Redis 15 menit. |
+| **Service-key auth** | Env var baru: `BACKBONE_SERVICE_KEY` — harus di-set di ECS task definition backbone **dan** gateway (nilai sama). |
+| **`apiclient` package** | Belum dipakai oleh handler mana pun — foundation untuk integrasi outbound ke Claude / SATU SEHAT / Jurnal.id. |
+| **CI** | Harus hijau (Lint + Unit Test + Build) sebelum bisa merge ke develop. |
+
+### Gateway PR #5 ← **Menunggu backbone PR #1**
+**`feature/webhook-integration` → `develop`**
 👉 https://github.com/Kalpa-Health/wellmed-gateway-go/pull/5
 
 | Topik | Detail |
 |-------|--------|
-| **HMAC signature verification** | Middleware verifikasi Mekari/Jurnal.id HMAC-SHA256 — apakah spec sudah sesuai? |
-| **IntegrationRpc** | gRPC client fetch config per-tenant dari backbone — backbone siap? |
-| **Phase 1 scope** | Handler sekarang hanya log + return 200. Phase 2 (forward ke backbone) kapan? |
+| **Status** | Kode selesai dan sudah diperbarui (x-service-key injection ditambah). Tidak bisa merge sebelum backbone PR #1 deploy ke dev. |
+| **HMAC verification** | Middleware verifikasi signature Jurnal.id — spec sesuai dokumen Mekari. |
+| **Env var baru** | `BACKBONE_SERVICE_KEY` — sama dengan yang di backbone. |
 
-**PR #2 — develop → staging**
+### Gateway PR #2 — develop → staging
 👉 https://github.com/Kalpa-Health/wellmed-gateway-go/pull/2
 
 | Topik | Detail |
@@ -186,7 +234,34 @@ git push origin feature/nama-fitur
 
 ---
 
-## 7. Demo Live (5 menit)
+## 7. Diskusi: Status Backbone & Rencana Dekomposisi
+
+**Konteks**: Backbone saat ini adalah monolith terstruktur — 37 domain module dalam satu binary, semua traffic masuk melalui satu `BACKBONE_GRPC_ADDRESS`. Ini adalah *current state yang disengaja* dan sudah didokumentasikan di `wellmed-system-architecture.md §2.3.2`. Bukan drift yang tidak diketahui.
+
+**Yang bagus**: Struktur internal sudah benar. Setiap module sudah punya `handler/`, `service/`, `repository/`, `dto/` sendiri. Schema PostgreSQL juga sudah dipartisi per service (`emr`, `cashier`, `pharmacy`, `backbone` schema). Jalur dekomposisi adalah ekstrak module ke binary baru — bukan untangle spaghetti.
+
+**Mapping module ke service target:**
+
+| Target Service | Module di Backbone Sekarang |
+|----------------|----------------------------|
+| **Tetap di Backbone** | `tenant`, `user`, `employee`, `role`, `permission`, `menu`, `unicode`, `autolist`, `address`, `reference_service`, `consumer`, `card_identity`, `people` |
+| **→ EMR** | `patient`, `visit_patient`, `visit_registration`, `visit_registration_referral`, `visit_examination`, `assessment`, `treatment`, `examination_treatment`, `medical_service_treatment`, `referral`, `practitioner_evaluation`, `frontline`, `data_sync`, `family_relationship` |
+| **→ Cashier** | `billing`, `invoice`, `transaction`, `item`, `item_rent`, `service_price`, `card_stock` |
+| **→ Pharmacy** | `pharmacy`, `pharmacy_sale`, `medicine` |
+
+**3 keputusan yang harus disepakati sebelum bisa mulai dekomposisi:**
+
+1. **Saga ownership setelah split.** Saga framework sekarang ada di Backbone. Visit creation saga saat ini menyentuh `patient`, `visit_patient`, `pharmacy_sale`, dan `billing` — semua dalam satu proses. Setelah split, siapa yang orkestrasi cross-service saga? Opsi: (a) EMR panggil Cashier langsung via gRPC dalam saga steps-nya, (b) Backbone tetap jadi saga-coordinator tipis sementara service lain implementasi domain logic-nya, (c) async via RabbitMQ untuk cross-service steps. **Ini keputusan paling penting — menentukan segalanya.**
+
+2. **Module mana yang route melalui Backbone vs. langsung ke service-nya?** EMR adalah kandidat split pertama. Apakah semua EMR call langsung `Gateway → EMR`, atau ada workflow tertentu yang masih perlu lewat Backbone (misalnya untuk saga coordination)?
+
+3. **Perubahan gateway routing.** Sekarang satu env var: `BACKBONE_GRPC_ADDRESS`. Setelah setiap split: tambah `EMR_GRPC_ADDRESS`, `CASHIER_GRPC_ADDRESS`, dst. Gateway perlu satu RPC client struct baru per service. Pekerjaan gateway-nya straightforward — tapi harus disequence dengan backbone split, bukan dilakukan sendiri.
+
+**Rekomendasi urutan**: Mulai dari EMR — paling besar, paling domain-specific, dan sudah terdefinisi sebagai Lite-tier service di product spec. Tapi keputusan (1) harus dijawab dulu sebelum sprint planning apapun.
+
+---
+
+## 8. Demo Live (5 menit)
 
 1. Buat branch: `git checkout -b test/demo-pipeline`
 2. Ubah satu baris komentar di file mana saja
@@ -196,7 +271,7 @@ git push origin feature/nama-fitur
 
 ---
 
-## 8. Pertanyaan yang Mungkin Muncul
+## 9. Pertanyaan yang Mungkin Muncul
 
 **"Ini memperlambat kerja saya?"**
 > Tidak. CI jalan paralel saat kamu kerjakan hal lain. Yang nambah adalah waktu tunggu 1 approval — tapi ini juga berarti ada orang lain yang tahu kodenya sebelum masuk.
