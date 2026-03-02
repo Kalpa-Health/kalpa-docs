@@ -141,8 +141,35 @@ c.Locals("tenant_id", tenantId)
 | 4.2 | Q1.2: Should middleware claims be stored in Fiber locals? | Medium |
 | 4.3 | Q2.2: Is there a plan to use gorm in the gateway, or should it be removed? | Low |
 | 4.4 | Q3.1: Should future SATU SEHAT calls go through the gateway or stay in the backbone? | High — before planning integration work |
-| 4.5 | **Gateway → service routing**: Currently the gateway routes all 39 modules to a single backbone gRPC address. Target architecture has the gateway routing to each domain service directly (EMR, Cashier, etc.). Which modules should stay routed through Backbone long-term, and which should get their own gRPC endpoints? EMR is a likely candidate to discuss — does it route through Backbone or get its own service address? This decision affects how we split the Backbone and how many gRPC connections the gateway manages. | High — blocks service decomposition planning |
+| 4.5 | **Backbone decomposition & service routing**: Backbone currently owns 37 domain modules covering EMR, Cashier, and Pharmacy workflows — everything routes through a single `BACKBONE_GRPC_ADDRESS`. Target architecture splits these into separate gRPC services. Three decisions block this work: (1) which modules move to EMR vs. stay in Backbone, (2) who owns saga orchestration after the split, (3) how gateway routing changes. See standalone section below. | High — blocks all service decomposition planning |
 
 ---
 
-*Last updated: 2026-03-01 | Source: Gateway codebase analysis (Plan v2.0), System architecture doc v1.1*
+### 4.5 Backbone Decomposition & Service Routing
+**Status**: ❓ Open — team decision required
+**Context**: `wellmed-backbone/internal/domain/` — all 37 modules
+
+**Observation**: Backbone currently owns all clinic domain logic across 37 modules in a single binary. The system architecture spec (§2.3.2) documents this as the known current state — the other services haven't been split out yet. The internal structure is already correct: every module has independent `handler/`, `service/`, `repository/`, and `dto/` layers. The PostgreSQL schema is also pre-partitioned (`emr`, `cashier`, `pharmacy`, `backbone` schemas per tenant DB). The seams exist; the decomposition path is extracting modules into new binaries, not untangling a ball of mud.
+
+**Module mapping (current → target):**
+
+| Target Service | Backbone Modules |
+|----------------|-----------------|
+| **Stay in Backbone** | `tenant`, `user`, `employee`, `role`, `permission`, `menu`, `unicode`, `autolist`, `address`, `reference_service`, `consumer`, `card_identity`, `people` |
+| **→ EMR** | `patient`, `visit_patient`, `visit_registration`, `visit_registration_referral`, `visit_examination`, `assessment`, `treatment`, `examination_treatment`, `medical_service_treatment`, `referral`, `practitioner_evaluation`, `frontline`, `data_sync`, `family_relationship` |
+| **→ Cashier** | `billing`, `invoice`, `transaction`, `item`, `item_rent`, `service_price`, `card_stock` |
+| **→ Pharmacy** | `pharmacy`, `pharmacy_sale`, `medicine` |
+
+**Three decisions that block decomposition:**
+
+1. **Which modules route through Backbone vs. get their own gRPC address?** EMR is the obvious first split. Does every EMR call go `Gateway → EMR` directly, or do some workflows (e.g., visit creation triggering a billing record) still call through Backbone for saga coordination?
+
+2. **Saga ownership after the split.** The saga framework lives in Backbone. A visit creation saga currently spans patient, visit, pharmacy_sale, and billing modules — all within one process. After the split, who orchestrates cross-service sagas? Options: (a) EMR calls Cashier directly via gRPC within its own saga steps, (b) Backbone retains a thin saga-coordinator role and individual services implement their domain logic, (c) async via RabbitMQ for cross-service steps.
+
+3. **Gateway routing impact.** Currently one env var: `BACKBONE_GRPC_ADDRESS`. After each split: add `EMR_GRPC_ADDRESS`, `CASHIER_GRPC_ADDRESS`, etc. Each requires a new RPC client struct in the gateway and updated module routing. This is straightforward gateway work — but needs to be sequenced with the backbone split, not done independently.
+
+**Recommendation**: Decide (2) first — saga architecture determines everything else. EMR is the right first split candidate: largest chunk, most domain-specific, and already a named Lite-tier service in the product spec.
+
+---
+
+*Last updated: 2026-03-02 | Source: Gateway codebase analysis (Plan v2.0), System architecture doc v1.1, backbone codebase analysis*

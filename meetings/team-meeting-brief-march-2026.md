@@ -173,7 +173,8 @@ git push origin feature/nama-fitur
 - [x] `wellmed-backbone` di-bootstrap sesuai standar org
 - [x] Integration auth layer Phase 2 dibangun di backbone (PR #1 dibuka)
 - [x] SG port 50051 dikonfigurasi — prod dan dev/staging (lihat §5.1)
-- [ ] Set `BACKBONE_SERVICE_KEY` di ECS task definitions backbone + gateway (nilai sama, generate: `openssl rand -hex 32`)
+- [x] `BACKBONE_SERVICE_KEY` di-generate, disimpan di SSM, dan ditambahkan ke `.env` di dev-app-go
+- [ ] Migrasi semua env vars Go services ke SSM Parameter Store (lihat §5.2 — Alex ambil task ini)
 
 ---
 
@@ -198,6 +199,22 @@ Ini sudah dikonfigurasi. Catatan untuk referensi tim dan onboarding environment 
 | **Staging Backbone** *(belum ada)* | Perlu ditambah saat staging app backbone dibuat | ⏳ Future |
 
 > **Catatan untuk saat staging backbone app ditambah:** Cukup clone konfigurasi SG dari dev-app backbone, lalu tambah satu inbound rule port 50051 source = staging gateway fe SG. Tidak ada yang lain yang perlu diubah di sisi infrastruktur.
+
+## 5.2 Pending Infra — Migrasi Env Vars Go Services ke SSM
+
+**Context:** Saat ini semua env vars backbone dan gateway (DB password, JWT secret, Redis password, AWS keys, dll.) disimpan sebagai plaintext di `/var/www/wellmed-api/.env` pada server. Ini sudah umum tapi bisa diperbaiki.
+
+**Pola yang sudah ada** (dari integration auth layer): SSM Parameter Store SecureString → di-inject ke container via `.env` saat startup atau via script pull. Infrastruktur SSM sudah terpakai dan dipahami.
+
+**Note:** PHP/Laravel di `.70` tidak perlu dimigrasikan — akan deprecated dalam ±30 hari.
+
+**Yang perlu dilakukan (Alex — sudah familiar dengan pola SSM ini):**
+- [ ] Inventarisasi semua secrets di `/var/www/wellmed-api/.env` pada dev dan prod
+- [ ] Simpan ke SSM sebagai SecureString dengan path convention: `/wellmed/{env}/go/{service}/{key}`
+- [ ] Buat script pull-and-inject sederhana yang dijalankan saat deploy (sebelum `docker compose up`)
+- [ ] Hapus plaintext values dari `.env` — ganti dengan placeholder atau generate dari script
+
+**Scope:** Go services saja (`backbone-service`, `gateway-service`, `pos-service`) pada `16-dev-plus-app-go-arm` dan `04-prod-app-arm`.
 
 ---
 
