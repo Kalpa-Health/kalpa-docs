@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2025-01-20
 **Author:** Alex
-**Reviewers:** Raka (CTO)
+**Reviewers:** Hamzah (CTO)
 
 ---
 
@@ -103,5 +103,5 @@
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2025-01-20 | Alex + Claude | Initial ADR — accepted by CTO (Raka) |
+| 1.0 | 2025-01-20 | Alex + Claude | Initial ADR — accepted by CTO (Hamzah) |
 | 1.1 | 01 Mar 2026 | Alex + Claude | Reformatted to kalpa-docs ADR standard |

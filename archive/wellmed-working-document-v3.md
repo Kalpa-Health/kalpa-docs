@@ -162,7 +162,7 @@ These were flagged as concerns but have been addressed:
 **Status**: Accepted  
 **Date**: 2025-01-20  
 **Author**: Alex  
-**Reviewers**: Raka (CTO)
+**Reviewers**: Hamzah (CTO)
 
 ### Context
 

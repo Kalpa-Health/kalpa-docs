@@ -98,10 +98,8 @@ Semua status check (Lint, Unit Test, Build) harus hijau sebelum bisa merge di ke
 ### 2.3 Setelah Bootstrap — 2 Langkah Manual
 
 1. **Update konteks arsitektur** di `.github/workflows/pr-review.yml` (cari `TODO:ARCH`) — isi dengan deskripsi arsitektur repo ini
-2. **Tambah secret Anthropic**:
-   ```bash
-   gh secret set ANTHROPIC_API_KEY -r Kalpa-health/<nama-repo>
-   ```
+//AK COMMENT - bisa minta bantuan dari bang claude
+
 
 Dokumentasi lengkap: [`wellmed-infrastructure/HOW-TO.md`](https://github.com/Kalpa-Health/wellmed-infrastructure/blob/main/HOW-TO.md)
 
@@ -145,7 +143,13 @@ git push origin feature/nama-fitur
 
 ## 4. Perubahan Per Anggota Tim
 
-### Untuk semua developer (Ingarso, Raka, Fajri, Hamzah)
+<<<<<<< Local Changes
+### Untuk semua developer (Abdul, Fajri, Hamzah)
+||||||| Old File
+## 4. Perubahan Per Anggota Tim
+=======
+### Untuk semua developer (Abdul, Raka, Fajri, Hamzah)
+>>>>>>> External Changes
 
 **Yang berubah:**
 - [ ] Semua kode masuk via PR ke `develop` — tidak ada push langsung ke `main`
@@ -180,11 +184,12 @@ git push origin feature/nama-fitur
 
 ## 5. Dampak pada Deployment
 
-**Sekarang**: Ingarso rsync langsung ke production. Ini akan diganti.
-
+**Sekarang**: Abdul rsync langsung ke production. Ini akan diganti.
 **Setelah**: Deploy hanya terjadi via merge ke `main` (workflow CD akan ditambahkan di fase berikutnya). Untuk saat ini, alur deploy manual tetap bisa jalan — tapi kodenya harus lewat `main` dulu.
 
 **Cutover**: Disepakati bersama di meeting ini. Rekomendasi: 1 minggu setelah meeting.
+
+// AK Comment - lebih baik kita sync repo -> VM jadi nggak butuh aktivitas manual dalam??
 
 ---
 
@@ -215,6 +220,8 @@ Ini sudah dikonfigurasi. Catatan untuk referensi tim dan onboarding environment 
 - [ ] Hapus plaintext values dari `.env` — ganti dengan placeholder atau generate dari script
 
 **Scope:** Go services saja (`backbone-service`, `gateway-service`, `pos-service`) pada `16-dev-plus-app-go-arm` dan `04-prod-app-arm`.
+
+//inefficient if there way more repeat config data vs. the secret keys, good to have 2? one standard per MS kalpa, and one specific per service (secrets)?
 
 ---
 

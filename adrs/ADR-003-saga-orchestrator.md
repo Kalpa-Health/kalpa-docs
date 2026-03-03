@@ -1,9 +1,9 @@
-# ADR-002: SAGA Orchestrator Pattern for Multi-Step Transactions
+# ADR-003: SAGA Orchestrator Pattern for Multi-Step Transactions
 
 **Status:** Accepted
 **Date:** 2025-01-20
 **Author:** Alex
-**Reviewers:** Raka (CTO)
+**Reviewers:** Hamzah (CTO)
 
 > **Note:** This ADR documents a decision that was made and confirmed. The full stub is pending expansion with implementation details. See [`wellmed-system-architecture.md §3.2.3`](../wellmed-system-architecture.md) and [`wellmed-testing-architecture.md §4.1`](../wellmed-testing-architecture.md) for current implementation notes.
 
@@ -74,3 +74,4 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 0.1 | 01 Mar 2026 | Alex + Claude | Stub — decision captured, implementation notes pending |
+| 0.2 | 03 Mar 2026 | Alex + Claude | Renumbered ADR-002 → ADR-003 to make room for ADR-002 consultation extraction |

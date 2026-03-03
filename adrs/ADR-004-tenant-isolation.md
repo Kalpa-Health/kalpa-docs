@@ -1,9 +1,9 @@
-# ADR-003: Tenant Isolation via Separate Databases
+# ADR-004: Tenant Isolation via Separate Databases
 
 **Status:** Accepted
 **Date:** 2025-01-20
 **Author:** Alex
-**Reviewers:** Raka (CTO), Hamzah (infrastructure)
+**Reviewers:** Hamzah (CTO)
 
 > **Note:** This ADR documents a decision that was made and confirmed. The stub is pending expansion with operational details. See [`wellmed-system-architecture.md §4.1`](../wellmed-system-architecture.md) for the current architecture description.
 
@@ -79,3 +79,4 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 0.1 | 01 Mar 2026 | Alex + Claude | Stub — decision captured, operational details pending |
+| 0.2 | 03 Mar 2026 | Alex + Claude | Renumbered ADR-003 → ADR-004 to make room for ADR-002 consultation extraction |

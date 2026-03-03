@@ -328,7 +328,7 @@ flowchart TD
 
 ## 6.1 Repository Structure
 
-6.1.1 Each service has its own Git repository. The Gateway repo is `kalpa-gateway` (previously `wellmed-gateway-go`). Service repos follow the naming pattern `kalpa-{service-name}`.
+6.1.1 Each service has its own Git repository. The Gateway repo is `wellmed-gateway-go`. Service repos follow the naming pattern `wellmed-{service-name}` (e.g., `wellmed-backbone`, `wellmed-consultation`).
 
 6.1.2 A dedicated `kalpa-docs` repo holds all cross-service documentation: this architecture document, ADRs, testing strategy, API client patterns, and system diagrams. Service repos link back to `kalpa-docs` for system-level context. (See the repo governance document for details on what lives where.)
 
