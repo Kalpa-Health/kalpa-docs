@@ -13,19 +13,7 @@
 - [x] Fix `kalpa-health` casing in consultation proto `go_package` declarations — several files still use `Kalpa-Health` mixed case (`wellmed-consultation/proto/*.proto`)
 - [X] Move `BACKBONE_GRPC_ADDRESS` into `config/env.go` — currently inline `os.Getenv()` in `internal/route/api.go:83` and `internal/app/app.go`
 - [X] Remove debug log `log.Infof("RESP (raw): %+v", resp.Data)` from `visit_examination/service/visit_examination.go:32`
-- [X] Wire input validation middleware (`validation.RequestValidator[T]()`) to all mutation routes in `route/api.go` — 11 unvalidated POST/PUT routes identified:
-  - `medicalTreatmentGroup.Post` (line 338)
-  - `itemGroup.Post` (line 360)
-  - `patientGroup.Post` (line 368)
-  - `patientGroup.Post("/:patient_id/visit-patient")` (line 371)
-  - `visitRegistrationGroup.Post("/:visit_registration_id/visit-examination")` (line 378)
-  - `visitRegistrationGroup.Put("/:visit_registration_id/visit-examination")` (line 379)
-  - `visitRegistrationGroup.Post("/:visit_registration_id/referral")` (line 383)
-  - `referralGroup.Post` (line 390)
-  - `frontlineGroup.Post` (line 404)
-  - `frontlineGroup.Put("/:frontline_id/examination/:type")` (line 405)
-  - `pharmacySaleGroup.Post` (line 411)
-- [X] Requires: define DTO structs per endpoint (use existing `roleDto.RoleRequest` as template)
+- [N/A] ~~Wire input validation middleware to all mutation routes~~ — **reverted, not applicable.** Gateway is intentionally a thin proxy; pass-through handlers send raw `ctx.Body()` as string to gRPC. The `role` handler is the deliberate exception — it uses a typed service interface and `RequestValidator` correctly. Validation on pass-through routes adds a redundant parse with no real benefit since the gRPC service validates the payload. Task removed from backlog.
 
 ## 1.2 Inter-Service Authentication (ADR-007)
 
