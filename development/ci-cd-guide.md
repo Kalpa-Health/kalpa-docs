@@ -70,9 +70,9 @@ make build    # Must compile
 
 ## 5. New Repo Bootstrap
 
-5.1.1 Every new Kalpa-health repo is brought up to org standard using `bootstrap-repo.sh`, which lives in `wellmed-infrastructure` (currently at `infrastructure/scripts/` until that folder becomes its own repo). It creates the three-branch structure, pushes the workflow templates, and applies branch protection rules — all in one command.
+5.1.1 Every new Kalpa-health repo is brought up to org standard using `bootstrap-repo.sh`, which lives in `wellmed-infrastructure/scripts/`. It creates the three-branch structure, pushes the workflow templates, and applies branch protection rules — all in one command.
 
-5.1.2 Full usage instructions are in [`infrastructure/HOW-TO.md`](https://github.com/Kalpa-Health/wellmed-infrastructure/blob/main/HOW-TO.md). The short version:
+5.1.2 Full usage instructions are in [`wellmed-infrastructure/HOW-TO.md`](https://github.com/Kalpa-Health/wellmed-infrastructure/blob/main/HOW-TO.md). The short version:
 
 ```bash
 # dry run first
@@ -82,7 +82,7 @@ make build    # Must compile
 ./bootstrap-repo.sh Kalpa-health/<repo-name>
 ```
 
-5.1.3 The workflow templates live in `infrastructure/templates/workflows/`. When the org CI standard changes, update the template there and re-run the script — it is idempotent.
+5.1.3 The workflow templates live in `wellmed-infrastructure/templates/workflows/`. When the org CI standard changes, update the template there and re-run the script — it is idempotent.
 
 5.1.4 Two manual steps are always required after bootstrap: update the `TODO:ARCH` architecture context in `pr-review.yml`, and add `ANTHROPIC_API_KEY` as a repo secret (`gh secret set ANTHROPIC_API_KEY -r Kalpa-health/<repo-name>`).
 

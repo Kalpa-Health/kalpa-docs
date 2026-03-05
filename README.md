@@ -47,8 +47,8 @@ Per-service overview documents (authored here, linked from service repos).
 | Service | Document | Repo |
 |---------|----------|------|
 | Gateway | [`services/gateway.md`](services/gateway.md) | [wellmed-gateway-go](https://github.com/Kalpa-Health/wellmed-gateway-go) |
-| Backbone | [`services/backbone.md`](services/backbone.md) | TBD |
-| EMR | [`services/emr.md`](services/emr.md) | TBD |
+| Backbone | [`services/backbone.md`](services/backbone.md) | [wellmed-backbone](https://github.com/Kalpa-Health/wellmed-backbone) |
+| Consultation | [services/consultation.md](services/consultation.md) | [wellmed-consultation](https://github.com/Kalpa-Health/wellmed-consultation) |
 
 ---
 
@@ -75,7 +75,7 @@ Per-service overview documents (authored here, linked from service repos).
 
 ## 7. Infrastructure & Tooling
 
-Infrastructure configuration and org-wide scripts live in `wellmed-infrastructure` (currently `infrastructure/` locally, pending GitHub repo creation).
+Infrastructure configuration and org-wide scripts live in `wellmed-infrastructure/` (pending GitHub repo creation).
 
 | Resource | What it covers |
 |----------|----------------|

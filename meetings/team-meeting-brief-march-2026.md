@@ -62,7 +62,7 @@ Backbone PR #1 merge ke develop dulu
 Mulai sekarang, setiap repo baru di Kalpa-health di-setup menggunakan **satu perintah**:
 
 ```bash
-cd ~/Projects/WellMed/infrastructure/scripts
+cd ~/Projects/WellMed/wellmed-infrastructure/scripts
 ./bootstrap-repo.sh Kalpa-health/<nama-repo>
 ```
 

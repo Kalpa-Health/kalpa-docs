@@ -2,7 +2,7 @@
 
 **Tanggal:** 03 Maret 2026
 **Dari:** Alex
-**Untuk:** Abdul, Raka, Fajri, Hamzah
+**Untuk:** Abdul, Fajri, Hamzah
 
 ---
 

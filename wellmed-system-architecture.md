@@ -1,14 +1,20 @@
 # WellMed System Architecture
 
-**Version:** 1.1
-**Date:** 01 March 2026
-**Previous Version:** 1.0 (01 March 2026) — initial consolidation
+**Version:** 1.3
+**Date:** 05 March 2026
+**Previous Version:** 1.2 (05 March 2026)
 **Maintained by:** Alex
 
-### Key Changes v1.0 → v1.1
-- Fixed Gateway routing: clarified current state (all via Backbone) vs. target state (direct per-service gRPC). Added dashed lines in topology diagram for target-state connections.
-- Confirmed 18 services for Enterprise tier (not 28).
-- Added cross-reference to QUESTIONS.md #4.5 for team discussion on which modules route through Backbone vs. directly.
+### Key Changes v1.2 → v1.3
+- SA-7: Renamed "EMR" → "Consultation" throughout diagrams and text to reflect wellmed-consultation service extraction (ADR-002 Phase 1 complete). Added Consultation to Internal Microservices subgraph.
+
+### Key Changes v1.1 → v1.2
+- SA-1: Updated Backbone role description to reflect three-role model (canonical model owner, sole saga orchestrator, auth/config) per ADR-005/006.
+- SA-2: Updated §2.3.2 Gateway target state to clarify cross-service writes route to Backbone (saga), reads route directly to domain services.
+- SA-3: Added RabbitMQ trigger + gRPC callback row to Protocol Matrix.
+- SA-4: Replaced §3.2 internal service communication diagram — removed illegal EMR→CASH direct call, added RabbitMQ trigger + gRPC callback pattern (ADR-006).
+- SA-5: Replaced §3.2.3 saga orchestrator description with full ADR-005-aligned description.
+- SA-6: Marked `/pkg/saga` row as internal to Backbone, not a shared importable package.
 
 ---
 
@@ -26,7 +32,7 @@
 
 | Tier | Services | Target |
 |------|----------|--------|
-| **Lite** | EMR, Cashier, Reporting, Appointment, Backbone, SATU SEHAT integration, BPJS integration | Small clinics |
+| **Lite** | Consultation, Cashier, Reporting, Appointment, Backbone, SATU SEHAT integration, BPJS integration | Small clinics |
 | **Plus** | Lite + Pharmacy, Lab, Radiology, Outpatient (multi-department), ED/IGD, Cashier+ (AR/insurance/corporate billing) | Mid-size clinics |
 | **Enterprise** | Plus + LIS+, RIS+, MCU, Inpatient, Warehouse/Inventory Management | Hospitals |
 | **HQ** | Subscription management, SaaS payments, user management, billing/invoicing | Internal — manages all tenants |
@@ -64,7 +70,7 @@ flowchart TD
 
     subgraph Internal["Internal Microservices"]
         BB["Backbone"]
-        EMR["EMR"]
+        CON["Consultation\n:50052"]
         CASH["Cashier"]
         RPT["Reporting"]
         APT["Appointment"]
@@ -92,13 +98,13 @@ flowchart TD
     HBFF -->|REST| GW
 
     GW -->|"gRPC\n(currently all via Backbone;\ntarget: direct per-service)"| BB
-    GW -.->|"gRPC (target)"| EMR
+    GW -.->|"gRPC (target)"| CON
     GW -.->|"gRPC (target)"| CASH
     GW -.->|"gRPC (target)"| PHARM
 
     BB --> PG
     BB --> Redis
-    EMR --> PG
+    CON --> PG
     CASH --> PG
     SS -->|REST| GovAPIs
     BPJS -->|REST| GovAPIs
@@ -113,7 +119,7 @@ flowchart TD
 
 2.2.1 **Edge Layer** — everything between the user's browser and internal microservices. The frontends (Nuxt.js SPAs) serve the UI. The BFFs (Nitro) handle security, session cookies, and reverse-proxy to the Gateway. The Gateway (Go/Fiber v3) is the single entry point for all backend calls — it authenticates via JWT/Redis, rate-limits, translates REST to gRPC, and routes to internal services.
 
-2.2.2 **Internal Microservices** — Go services communicating via gRPC (synchronous) and RabbitMQ (asynchronous). Each service owns its domain: EMR owns medical records, Cashier owns billing, Backbone owns tenant config and feature flags. All external API calls (SATU SEHAT, P-Care, Xendit, etc.) originate from dedicated integration services, never from the Gateway.
+2.2.2 **Internal Microservices** — Go services communicating via gRPC (synchronous) and RabbitMQ (asynchronous). Each service owns its domain: Consultation owns medical records and the full visit lifecycle, Cashier owns billing. Backbone has three roles: (a) canonical domain model owner for `patient`, `user`, `employee`, and system-wide mastering data (ADR-006 §2.1); (b) sole saga orchestrator for all cross-service write operations (ADR-005 §2.1); (c) auth, tenant config, and feature flags. All external API calls (SATU SEHAT, P-Care, Xendit, etc.) originate from dedicated integration services, never from the Gateway.
 
 2.2.3 **Data Layer** — PostgreSQL (per-tenant databases with per-service schemas), Redis (session cache, visit-build cache, type cache, pub/sub for cache invalidation), RabbitMQ (async job processing, external API sync, dead letter queues), ElasticSearch (reporting queries, patient search, analytics).
 
@@ -140,16 +146,16 @@ flowchart LR
     H --> S
     S --> RPC
     RPC -->|"gRPC"| BB["Backbone"]
-    RPC -->|"gRPC"| EMR["EMR"]
+    RPC -->|"gRPC"| CON["Consultation\n:50052"]
     RPC -->|"gRPC"| CASH["Cashier"]
     RPC -->|"gRPC"| OTHER["Other Services"]
 ```
 
 2.3.1 The Gateway has 39 domain modules, each following the same pattern: `handler/` → `service/` → RPC client. There is no repository layer — the Gateway never touches PostgreSQL directly. All data flows through gRPC to internal microservices.
 
-2.3.2 **Current state vs. target state.** As of March 2026, the Gateway routes all gRPC calls to a single Backbone service (one `BACKBONE_GRPC_ADDRESS`). The target architecture has the Gateway routing directly to each domain service (EMR, Cashier, Pharmacy, etc.) via separate gRPC connections. The current single-backbone routing exists because the other services haven't been split out yet. Open question: some modules (e.g., EMR) may continue to route through Backbone — this needs team discussion. (See QUESTIONS.md #4.5.)
+2.3.2 **Current state vs. target state.** As of March 2026, the Gateway routes all gRPC calls to a single Backbone service (one `BACKBONE_GRPC_ADDRESS`). The target architecture has the Gateway routing directly to each domain service (Consultation, Cashier, Pharmacy, etc.) via separate gRPC connections for **read requests and single-service writes**. Cross-service write operations that span domain boundaries are orchestrated by Backbone via saga (ADR-005) — Gateway routes these to Backbone, which coordinates the multi-step flow. Gateway never triggers inter-module calls for write operations that span domains.
 
-2.3.3 Business logic in the Gateway is thin: input validation, default values, timeout handling, and protobuf-to-DTO mapping. The real business logic lives in the domain services (Backbone, EMR, Cashier, etc.).
+2.3.3 Business logic in the Gateway is thin: input validation, default values, timeout handling, and protobuf-to-DTO mapping. The real business logic lives in the domain services (Backbone, Consultation, Cashier, etc.).
 
 2.3.4 Authentication flow: Bearer token extracted → JWT verified against Redis (session store) → claims extracted (user_id, tenant_id, tenant_db, tenant_schema) → injected as gRPC metadata → propagated to all downstream services.
 
@@ -165,18 +171,23 @@ flowchart LR
 | **RabbitMQ (async)** | Can wait, needs reliability | Sync visit to SATU SEHAT, process BPJS claim |
 | **REST/JSON (external)** | All external API communication | P-Care claims submission, Xendit payment |
 | **Redis pub/sub** | Cache invalidation broadcast | Price update notification across services |
+| **RabbitMQ trigger + gRPC callback** | Saga step coordination across service boundaries | Visit creation → POS line item push → Backbone callback |
 
 ## 3.2 Internal Service Communication
 
 ```mermaid
 flowchart LR
     GW["Gateway"] -->|gRPC sync| BB["Backbone"]
-    GW -->|gRPC sync| EMR["EMR"]
-    GW -->|gRPC sync| CASH["Cashier"]
+    GW -.->|"gRPC sync (target: reads)"| CON["Consultation\n:50052"]
+    GW -.->|"gRPC sync (target: reads)"| CASH["Cashier"]
 
-    EMR -->|RabbitMQ async| SS["SATU SEHAT\nIntegration"]
+    BB -->|"RabbitMQ trigger\n(saga step)"| CON
+    BB -->|"RabbitMQ trigger\n(saga step)"| CASH
+    CON -->|"gRPC callback\n(saga result)"| BB
+    CASH -->|"gRPC callback\n(saga result)"| BB
+
+    CON -->|RabbitMQ async| SS["SATU SEHAT\nIntegration"]
     CASH -->|RabbitMQ async| BPJS["BPJS\nIntegration"]
-    EMR -->|gRPC sync| CASH
 
     SS -->|REST| SATUSEHAT["SATU SEHAT API"]
     BPJS -->|REST| PCARE["P-Care API"]
@@ -192,9 +203,17 @@ flowchart LR
 
 3.2.1 All inter-service sync calls use gRPC with Protocol Buffers. Proto definitions live in `/proto/` and generate typed clients and servers. This gives us type safety, auto-generated documentation, and efficient binary serialization.
 
-3.2.2 All external API calls are async via RabbitMQ. When a visit is created in EMR, it publishes a message to the SATU SEHAT sync queue. The SATU SEHAT integration service consumes the message, calls the government API, and either confirms success or routes to a dead letter queue on permanent failure.
+3.2.2 All external API calls are async via RabbitMQ. When a visit is created in Consultation, it publishes a message to the SATU SEHAT sync queue. The SATU SEHAT integration service consumes the message, calls the government API, and either confirms success or routes to a dead letter queue on permanent failure.
 
-3.2.3 The SAGA orchestrator pattern is used for multi-step operations that span services (e.g., creating a visit that also creates a billing record and schedules a SATU SEHAT sync). Each step has a compensation (undo) function. The orchestrator coordinates execution and rollback.
+3.2.3 **Saga Orchestration (ADR-005).** Backbone is the sole saga orchestrator for all cross-service write operations. The pattern:
+
+- **Trigger:** Backbone publishes a RabbitMQ message to trigger each saga step — it never blocks waiting for a response. The message contains the full payload the module needs (ADR-006 §2.3).
+- **Callback:** The receiving module processes the step and responds to Backbone via gRPC (`SagaCallbackService.ReportStepResult`) with a standard envelope: `saga_id`, `step_id`, `status` (COMPLETED / FAILED / REJECTED), `payload`, `error_code`.
+- **State:** Saga state is persisted in a PostgreSQL audit table (source of truth) with Redis as fast cache. Step-level state tracks `pending → in_flight → completed / failed / compensated`.
+- **Compensation:** On step failure or timeout, Backbone executes the compensation sequence for that saga type, rolling back completed steps in reverse order.
+- **No business logic in Backbone:** Backbone composes payloads and coordinates steps. Business decisions (e.g., stock availability, billing rules) live in the domain modules. Backbone receives results, not decisions.
+
+See ADR-005 for full details and alternatives considered.
 
 ## 3.3 External API Client Pattern
 
@@ -357,7 +376,7 @@ Every service follows the same four-layer pattern. This consistency means any de
 | Package | Purpose |
 |---------|---------|
 | `/pkg/apiclient` | Reusable HTTP client with circuit breaker, retry, DLQ (see Section 3.3) |
-| `/pkg/saga` | SAGA orchestrator pattern implementation |
+| `/pkg/saga` | ~~Shared saga package~~ — Saga orchestrator is internal to Backbone (`internal/saga/`), not a shared importable package. Consultation holds a local copy for Phase 1 (ADR-002 §5.2). Extraction to a shared module is deferred. |
 | `/pkg/queue` | RabbitMQ utilities |
 | `/pkg/domain/cache` | Redis caching utilities |
 | `/pkg/domain/validation` | Common validators (NIK, phone number, etc.) |
@@ -464,3 +483,5 @@ This architecture overview is the root document. Related documents provide depth
 |---------|------|--------|---------|
 | 1.0 | 01 Mar 2026 | Alex + Claude | Initial creation. Consolidated architecture sections from testing-architecture-v5, api-client-pattern-v1, working-document-v2, and gateway PLAN-v2 into a standalone system architecture reference. Added mermaid diagrams for all major flows. |
 | 1.1 | 01 Mar 2026 | Alex + Claude | Fixed Gateway routing model (current: all via Backbone; target: direct per-service). Confirmed 18 Enterprise services. Added QUESTIONS.md cross-reference for team discussion. |
+| 1.2 | 05 Mar 2026 | Alex + Claude | SA-1 through SA-6: Updated Backbone role to three-role model; updated Gateway target state; added RabbitMQ+gRPC callback to protocol matrix; replaced internal comms diagram (removed ADR-006-violating EMR→CASH direct call); replaced saga description with ADR-005-aligned detail; marked /pkg/saga as internal to Backbone. |
+| 1.3 | 05 Mar 2026 | Alex + Claude | SA-7: Renamed EMR → Consultation throughout to reflect ADR-002 Phase 1 completion. Updated product tier table, mermaid diagrams, service descriptions. |

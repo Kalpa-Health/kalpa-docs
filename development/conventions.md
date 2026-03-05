@@ -26,6 +26,12 @@
 | Database tables | `snake_case` | `visit_registrations` |
 | Environment variables | `SCREAMING_SNAKE_CASE` | `BACKBONE_GRPC_ADDRESS` |
 
+### 2.1 Go Module Paths
+
+- All Go module paths and GitHub repository references **must be fully lowercase**: `github.com/kalpa-health/repo-name`
+- Mixed-case paths (e.g. `github.com/Kalpa-Health/...`) cause import resolution failures — Go module paths are case-sensitive and the toolchain normalises to lowercase
+- This applies to the `module` declaration in `go.mod`, all `import` blocks, and any documentation or config that references Go package paths
+
 ---
 
 ## 3. Project Structure
@@ -91,3 +97,4 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 0.1 | 01 Mar 2026 | Alex + Claude | Initial stub with foundational conventions |
+| 0.2 | 05 Mar 2026 | Alex + Claude | Added §2.1 Go module path casing rule |

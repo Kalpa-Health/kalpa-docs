@@ -1,9 +1,13 @@
 # Repo Governance — What Lives Where
 
-**Version:** 1.2
-**Date:** 02 March 2026
-**Previous Version:** 1.1 (01 March 2026) — added §4.4 docs-only branch strategy
+**Version:** 1.3
+**Date:** 05 March 2026
+**Previous Version:** 1.2 (02 March 2026) — added §3.2 wellmed-infrastructure repo
 **Maintained by:** Alex
+
+### Key Changes v1.2 → v1.3
+- Added `wellmed-consultation` to §3.1 directory structure (extracted from Backbone per ADR-002 Phase 1 complete).
+- Updated §1.1.1 service list to reference consultation instead of EMR.
 
 ### Key Changes v1.1 → v1.2
 - Added §3.3: `wellmed-infrastructure` repo — defines infrastructure as a first-class repo type alongside docs and service repos.
@@ -14,7 +18,7 @@
 
 # 1. The Problem
 
-1.1.1 WellMed is a multi-repo architecture — each service (gateway, backbone, EMR, cashier, etc.) has its own Git repository. System-level documentation (architecture overviews, ADRs, cross-service patterns, testing strategy) doesn't naturally belong in any single service repo.
+1.1.1 WellMed is a multi-repo architecture — each service (gateway, backbone, consultation, cashier, etc.) has its own Git repository. System-level documentation (architecture overviews, ADRs, cross-service patterns, testing strategy) doesn't naturally belong in any single service repo.
 
 1.1.2 Without a clear home for umbrella documentation, architecture knowledge stays in Google Docs, Slack threads, or people's heads. It drifts out of sync. New team members can't find it. AI agents can't reference it in context.
 
@@ -51,6 +55,7 @@ kalpa-docs/
 ├── services/                              # Per-service reference docs (authored here)
 │   ├── gateway.md                         # Gateway service overview + links
 │   ├── backbone.md
+│   ├── consultation.md                    # Extracted from Backbone per ADR-002
 │   ├── emr.md
 │   └── ...
 │
@@ -97,7 +102,7 @@ wellmed-infrastructure/
 
 3.2.1 This repo is the source of truth for anything that applies uniformly across all service repos: CI templates, branch protection standards, AWS instance configuration. If the CI standard changes, the template changes here, and `bootstrap-repo.sh` re-applies it.
 
-3.2.2 The `wellmed-infrastructure` repo is currently a local folder (`infrastructure/`) pending creation as a standalone GitHub repo. See `HOW-TO.md §7` for the pending actions.
+3.2.2 The `wellmed-infrastructure` repo is currently a local folder (`wellmed-infrastructure/`) pending creation as a standalone GitHub repo. See `HOW-TO.md §7` for the pending actions.
 
 ## 3.3 Service Repos (e.g., `kalpa-gateway`)
 
@@ -252,3 +257,4 @@ This service is the WellMed API Gateway. For system-wide architecture, see:
 | 1.0 | 01 Mar 2026 | Alex + Claude | Initial creation. Establishes kalpa-docs repo pattern, defines what lives where, provides migration path from current doc state. |
 | 1.1 | 01 Mar 2026 | Alex + Claude | Added §4.4: branch strategy for docs-only changes in service repos (docs/* → main directly). |
 | 1.2 | 02 Mar 2026 | Alex + Claude | Added §3.2 wellmed-infrastructure repo (structure, purpose, pending GitHub creation). Added §4.5 infrastructure repo governance. Updated §4.1 decision matrix with infrastructure rows. |
+| 1.3 | 05 Mar 2026 | Alex + Claude | Added wellmed-consultation to §3.1 directory structure (ADR-002 Phase 1 complete). Updated §1.1.1 service list. |

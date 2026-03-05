@@ -1,7 +1,7 @@
 # Service: Backbone
 
-**Version:** 1.0
-**Date:** 2026-03-02
+**Version:** 1.2
+**Date:** 2026-03-05
 **Status:** Active — core gRPC backend
 **Maintained by:** Alex (Kalpa Inovasi Digital)
 
@@ -9,9 +9,9 @@
 
 ## 1. Overview
 
-1.1 Backbone is the core internal gRPC backend for WellMed. It owns all business logic, direct database access, multi-tenant architecture, and the saga framework for distributed transactions.
+1.1 Backbone is the core internal gRPC backend for WellMed with three roles: (a) canonical domain model owner for `patient`, `user`, `employee`, and system-wide mastering data; (b) sole saga orchestrator for all cross-service write operations; (c) auth, tenant config, and feature flags. Business logic belongs to domain services — Backbone coordinates, it does not own business decisions.
 
-1.2 The gateway (`wellmed-gateway-go`) acts as a thin HTTP-to-gRPC proxy. All real work happens in backbone.
+1.2 The gateway (`wellmed-gateway-go`) routes reads directly to domain services (target state) and cross-service writes to Backbone for saga orchestration.
 
 1.3 For the full system context, see [`wellmed-system-architecture.md §2.1`](../wellmed-system-architecture.md).
 
@@ -31,39 +31,59 @@
 
 ## 3. Key Responsibilities
 
-- **Business logic** for all 19 domain services (patient, pharmacy_sale, visit_patient, etc.)
-- **Multi-tenant database access** — one PostgreSQL database per tenant, year-based schema isolation
-- **Auth** — JWT issuance, validation, Redis session management
-- **Saga framework** — distributed transactions (SYNC blocking + ASYNC non-blocking + compensation)
-- **POS integration** — gRPC client to `wellmed-pos` for Transaction, Billing, Invoice
+- **Canonical domain model ownership** — `patient`, `user`, `employee`, and system-wide mastering data. No module duplicates these models (ADR-006 §2.1).
+- **Saga orchestration** — sole coordinator for all cross-service write operations. Composes step payloads, manages saga state (PostgreSQL audit + Redis cache), executes compensation on failure (ADR-005).
+- **Canonical visit record reception** — receives FHIR-shaped visit outcome from Consultation on doctor sign-off. This is the record used for SATU SEHAT sync, closed invoices, and audit (ADR-002 §2.4).
+- **Auth** — JWT issuance, validation, Redis session management.
+- **Multi-tenant database access** — one PostgreSQL database per tenant, per-service schema isolation.
+- **POS pass-through** — Transaction, Billing, Invoice services are saga-orchestrated downstream calls to `wellmed-pos`, not business logic Backbone owns.
 
 ---
 
 ## 4. gRPC Interface Catalog
 
-19 services registered at `internal/app/application.go`:
+4.1 14 services registered at `internal/app/application.go`. Post ADR-002 Phase 1 completion, these split into three categories:
+
+### 4.1 Staying in Backbone
 
 | # | Service | Key Methods |
 |---|---------|-------------|
 | 1 | UserService | Login, RefreshToken |
 | 2 | UnicodeService | GetAll, GetByFlag |
 | 3 | MenuService | GetAll |
-| 4 | AssessmentService | Store, GetByVisit |
-| 5 | AutoListService | GetAll |
-| 6 | TreatmentService | GetAll, Store |
-| 7 | RoleService | GetAll, Store |
-| 8 | ItemService | GetAll, Store |
-| 9 | PatientService | GetAll, GetById, Store |
-| 10 | VisitPatientService | GetAll, GetById, Store, UpdateStatus |
-| 11 | VisitRegistrationService | GetAll, Store |
-| 12 | VisitRegistrationReferralService | GetAll, Store |
-| 13 | VisitExaminationService | GetAll, Store |
-| 14 | ReferralService | GetAll, Store |
-| 15 | FrontlineService | GetAll, Store |
-| 16 | PharmacySaleService | GetAll, GetById, Store |
-| 17 | TransactionService | → POS pass-through |
-| 18 | BillingService | → POS pass-through |
-| 19 | InvoiceService | → POS pass-through |
+| 4 | AutoListService | GetAll |
+| 5 | RoleService | GetAll, Store |
+| 6 | PatientService (canonical) | GetAll, GetById, Store |
+| 7 | ItemService | GetAll, Store |
+| 8 | PharmacySaleService | GetAll, GetById, Store |
+| 9 | TransactionService | → POS pass-through |
+| 10 | BillingService | → POS pass-through |
+| 11 | InvoiceService | → POS pass-through |
+
+### 4.2 Extracted to `wellmed-consultation` — Phase 1 Complete
+
+These 8 services moved to `wellmed-consultation` at `:50052` as of 05 Mar 2026 (ADR-002 Phase 1). They are no longer registered in Backbone.
+
+| # | Service | Now In |
+|---|---------|--------|
+| — | AssessmentService | `wellmed-consultation` `:50052` |
+| — | TreatmentService | `wellmed-consultation` `:50052` |
+| — | VisitPatientService | `wellmed-consultation` `:50052` |
+| — | VisitRegistrationService | `wellmed-consultation` `:50052` |
+| — | VisitRegistrationReferralService | `wellmed-consultation` `:50052` |
+| — | VisitExaminationService | `wellmed-consultation` `:50052` |
+| — | ReferralService | `wellmed-consultation` `:50052` |
+| — | FrontlineService | `wellmed-consultation` `:50052` |
+
+See [`services/consultation.md`](consultation.md) for the full gRPC interface catalog.
+
+### 4.3 New Backbone Services
+
+| # | Service | Purpose | ADR |
+|---|---------|---------|-----|
+| 20 | SagaCallbackService | ReportStepResult — standard callback for all modules | ADR-005 |
+| 21 | CanonicalVisitService | WriteVisitRecord — receives sign-off from Consultation | ADR-002 |
+| 22 | SagaStatusService | GetStatus — saga state for frontend polling | ADR-005 |
 
 ---
 
@@ -81,18 +101,33 @@
 
 ## 6. Saga Framework
 
-6.1 Backbone uses a generic saga framework (`internal/saga/`) for multi-step operations that require atomic execution with compensation on failure.
+6.1 Backbone uses a single non-blocking saga pattern (`internal/saga/`) for all cross-service write operations (ADR-005). There are no blocking execution modes.
 
-6.2 Two execution modes:
+6.2 **Pattern:** Backbone publishes a RabbitMQ message to trigger each step. The receiving module processes the step and responds via gRPC callback (`SagaCallbackService.ReportStepResult`).
 
-| Mode | Blocks? | Example |
-|------|---------|---------|
-| SYNC | Yes (caller waits) | `pharmacy_sale` — needs POS transaction ID for receipt |
-| ASYNC | No (returns saga_id) | `patient` create — long multi-step registration |
+6.3 **Callback envelope:**
 
-6.3 All compensations are stored in saga context (JSONB) so they survive process restarts.
+| Field | Type | Purpose |
+|-------|------|---------|
+| `saga_id` | string | Saga instance identifier |
+| `step_id` | string | Step identifier within saga |
+| `status` | enum | COMPLETED / FAILED / REJECTED |
+| `payload` | bytes | JSON-encoded step result |
+| `error_code` | string | Module-specific error code (e.g., `POS_INSUFFICIENT_STOCK`) |
+| `idempotency_key` | string | Prevents duplicate processing |
+| `tenant` | string | Tenant identifier for DB routing |
 
-6.4 Full documentation: [`wellmed-backbone/internal/saga/README.md`](../../wellmed-backbone/internal/saga/README.md)
+6.4 **State machine:** `pending → in_flight → completed / failed / compensated`. PostgreSQL saga audit table is the source of truth. Redis provides fast state cache for in-flight sagas and the `SagaStatusService` polling endpoint.
+
+6.5 **Compensation:** On step failure or timeout, Backbone executes compensation in reverse order for completed steps. Compensation steps use the `compensation` retry profile (2s base, 10 retries, ~3min max).
+
+6.6 **REJECTED vs FAILED:** A `REJECTED` callback means the payload was malformed (infra error) — Backbone retries without compensation. A `FAILED` callback means a business rule rejection — Backbone triggers the compensation sequence.
+
+6.7 **Rule:** Backbone must never absorb business logic from modules. It composes payloads, coordinates steps, and manages state. Business decisions live in the domain modules.
+
+6.8 **RabbitMQ convention:** Exchange `wellmed.saga`. Routing key pattern: `saga.{saga_type}.{step_name}.{trigger|compensate}`.
+
+6.9 Full framework documentation: [`wellmed-backbone/internal/saga/README.md`](../../wellmed-backbone/internal/saga/README.md)
 
 ---
 
@@ -120,7 +155,42 @@
 
 ---
 
-## 9. Service-Specific Documentation
+## 9. Interrelations with Consultation
+
+9.1 Backbone and `wellmed-consultation` have a carefully bounded relationship. The interactions are non-obvious — this section exists to prevent accidental ADR-006 violations.
+
+**The only permitted runtime calls:**
+
+| Direction | Call | When | ADR |
+|-----------|------|------|-----|
+| Backbone → Consultation | RabbitMQ trigger (`wellmed.saga` exchange) | Each saga step Consultation must execute | ADR-005 |
+| Consultation → Backbone | gRPC `CanonicalVisitService.WriteVisitRecord` | Doctor sign-off only | ADR-006 §2.4 |
+
+No other calls are permitted. Backbone never calls Consultation's gRPC services. Consultation never calls Backbone's patient/employee/item services directly.
+
+9.2 **How data flows from Backbone into Consultation:** Backbone composes the full step payload into the RabbitMQ trigger. Consultation reads from that payload and never fetches from Backbone at runtime. If a step needs `patient_name`, Backbone includes it in the trigger.
+
+9.3 **How `visit_id` flows after visit creation:** Consultation creates the visit (owns the ULID), calls back with `{visit_id}` in the saga callback payload. Backbone stores `visit_id` in `SagaContext` and threads it into subsequent step payloads (POS billing, pharmacy, sign-off).
+
+9.4 **Consultation source code still in Backbone during transition:** Modules `visit_patient`, `visit_examination`, `assessment`, `treatment`, `frontline`, `referral`, `family_relationship` exist in both repos. Backbone's copy is used only by the `patient` saga builder (new-patient registration flow creates a patient + first visit in one saga). These will be removed from Backbone once the `patient` saga builder is refactored to use a Remote `create_visit` step. See `application.go` lines 13–17.
+
+9.5 **Wiring status as of 05 Mar 2026:**
+
+| Item | Status |
+|------|--------|
+| `canonical_visit.proto` — Go generated | ✅ `canonicalvisitpb/*.pb.go` exist |
+| `CanonicalVisitService` — handler registered | ✅ registered (stub — returns Unimplemented) |
+| `saga_callback.proto` — Go generated | ❌ `sagacallbackpb/` is empty |
+| `saga_status.proto` — Go generated | ❌ `sagastatuspb/` is empty |
+| `SagaCallbackService` — handler registered | ❌ waiting on protoc |
+| `SagaStatusService` — handler registered | ❌ waiting on protoc |
+| `CreateVisit` saga builder | ❌ not yet written |
+
+Full wiring plan: `kalpa-docs/plans/visit-saga-wiring/visit-saga-wiring-PLAN.md`
+
+---
+
+## 10. Service-Specific Documentation
 
 | Document | Location |
 |----------|---------|
@@ -140,3 +210,6 @@
 |---------|------|--------|---------|
 | 0.1 | 01 Mar 2026 | Alex + Claude | Initial stub |
 | 1.0 | 02 Mar 2026 | Alex + Claude | Full service doc — all sections complete |
+| 1.1 | 05 Mar 2026 | Alex + Claude | BB-1 through BB-4: Updated Backbone role to three-role model (canonical model owner, saga orchestrator, auth/config); updated §3 responsibilities to remove stale sync/business-logic framing; split §4 gRPC catalog into three subsections (staying, extracting to consultation, new saga services); replaced §6 saga framework with ADR-005-aligned async-only description including callback envelope, REJECTED/FAILED distinction, and RabbitMQ convention. |
+| 1.2 | 05 Mar 2026 | Alex + Claude | §4.2 updated: 8 consultation services extracted to wellmed-consultation (ADR-002 Phase 1 complete). §4.1 count updated 22→14. |
+| 1.3 | 05 Mar 2026 | Alex + Claude | Added §9 Interrelations with Consultation — boundary rules, data flow patterns, visit_id threading, transition-period duplicate source note, wiring status table. References visit-saga-wiring plan. |

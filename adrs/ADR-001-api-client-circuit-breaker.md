@@ -1,6 +1,6 @@
 # ADR-001: API Client Pattern with Circuit Breaker
 
-**Status:** Accepted
+**Status:** Implemented
 **Date:** 2025-01-20
 **Author:** Alex
 **Reviewers:** Hamzah (CTO)
@@ -105,3 +105,4 @@
 |---------|------|--------|---------|
 | 1.0 | 2025-01-20 | Alex + Claude | Initial ADR — accepted by CTO (Hamzah) |
 | 1.1 | 01 Mar 2026 | Alex + Claude | Reformatted to kalpa-docs ADR standard |
+| 1.2 | 04 Mar 2026 | Alex + Claude | Status → Implemented. Package built at `wellmed-gateway-go/pkg/apiclient/` — config, errors, circuit_breaker, retry, logging, metrics, dead_letter, client. First consumer: Jurnal.id webhook Phase 2 handler. |
