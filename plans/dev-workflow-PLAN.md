@@ -10,9 +10,9 @@
 
 ## 1.1 Gateway Housekeeping
 
-- [ ] Fix `kalpa-health` casing in consultation proto `go_package` declarations — several files still use `Kalpa-Health` mixed case (`wellmed-consultation/proto/*.proto`)
-- [ ] Move `BACKBONE_GRPC_ADDRESS` into `config/env.go` — currently inline `os.Getenv()` in `internal/route/api.go:83` and `internal/app/app.go`
-- [ ] Remove debug log `log.Infof("RESP (raw): %+v", resp.Data)` from `visit_examination/service/visit_examination.go:32`
+- [x] Fix `kalpa-health` casing in consultation proto `go_package` declarations — several files still use `Kalpa-Health` mixed case (`wellmed-consultation/proto/*.proto`)
+- [x] Move `BACKBONE_GRPC_ADDRESS` into `config/env.go` — currently inline `os.Getenv()` in `internal/route/api.go:83` and `internal/app/app.go`
+- [x] Remove debug log `log.Infof("RESP (raw): %+v", resp.Data)` from `visit_examination/service/visit_examination.go:32`
 - [ ] Wire input validation middleware (`validation.RequestValidator[T]()`) to all mutation routes in `route/api.go` — 11 unvalidated POST/PUT routes identified:
   - `medicalTreatmentGroup.Post` (line 338)
   - `itemGroup.Post` (line 360)
