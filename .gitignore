@@ -1,3 +1,7 @@
 .DS_Store
 *.swp
 *.swo
+
+# Claude Code local artifacts
+.claude/logs/
+.claude/settings.local.json
