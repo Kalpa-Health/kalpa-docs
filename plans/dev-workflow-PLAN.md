@@ -27,13 +27,21 @@
   - `pharmacySaleGroup.Post` (line 411)
 - [ ] Requires: define DTO structs per endpoint (use existing `roleDto.RoleRequest` as template)
 
-## 1.2 Backbone Housekeeping
+## 1.2 Inter-Service Authentication (ADR-007)
+
+- [ ] **Backbone:** replace single shared token check with a `map[token → service_name]` loaded from env vars (`BACKBONE_API_KEY_GATEWAY`, `BACKBONE_API_KEY_CONSULTATION`); log `caller=<service_name>` via gRPC interceptor
+- [ ] **Gateway:** rename env var from shared `BACKBONE_API_KEY` to service-specific `BACKBONE_API_KEY` (value changes, key name can stay, but SSM path changes)
+- [ ] **Consultation:** same as gateway
+- [ ] **SSM manifests:** add `/wellmed/{env}/gateway/BACKBONE_API_KEY` and `/wellmed/{env}/consultation/BACKBONE_API_KEY` to `wellmed-infrastructure` manifests; remove shared key entry
+- [ ] Rotate all tokens after migration — verify each service independently before removing old shared key
+
+## 1.3 Backbone Housekeeping
 
 - [ ] Drop `props` column from `practitioner_evaluation` table — always empty/null, never written
 - [ ] Drop `props` column from `prescription` table — no BuildProps calls in service layer
 - [ ] Audit non-clinical tables with props columns for empty/unused props (geographic tables: provinces, districts, subdistricts, villages; access control: roles, permissions, personal_access_tokens; product: versions, installed_features) — drop column where consistently null
 
-## 1.3 Documentation Gaps
+## 1.4 Documentation Gaps
 
 - [ ] Fill in `operations/database-migrations.md` — 8 TODO items covering migration tooling, naming conventions, rollback procedures, multi-tenant execution
 - [ ] Remove or replace `services/emr.md` stub — superseded by `services/consultation.md`
