@@ -36,7 +36,7 @@
 - **Canonical visit record reception** — receives FHIR-shaped visit outcome from Consultation on doctor sign-off. This is the record used for SATU SEHAT sync, closed invoices, and audit (ADR-002 §2.4).
 - **Auth** — JWT issuance, validation, Redis session management.
 - **Multi-tenant database access** — one PostgreSQL database per tenant, per-service schema isolation.
-- **POS pass-through** — Transaction, Billing, Invoice services are saga-orchestrated downstream calls to `wellmed-pos`, not business logic Backbone owns.
+- **Cashier pass-through** — Transaction, Billing, Invoice services are proxy pass-throughs to `wellmed-cashier` (`:50053`). Backbone does not own these — it forwards the call via `CASHIER_GRPC_ADDRESS`.
 
 ---
 
@@ -56,9 +56,9 @@
 | 6 | PatientService (canonical) | GetAll, GetById, Store |
 | 7 | ItemService | GetAll, Store |
 | 8 | PharmacySaleService | GetAll, GetById, Store |
-| 9 | TransactionService | → POS pass-through |
-| 10 | BillingService | → POS pass-through |
-| 11 | InvoiceService | → POS pass-through |
+| 9 | TransactionService | → Cashier pass-through (`wellmed-cashier :50053`) |
+| 10 | BillingService | → Cashier pass-through (`wellmed-cashier :50053`) |
+| 11 | InvoiceService | → Cashier pass-through (`wellmed-cashier :50053`) |
 
 ### 4.2 Extracted to `wellmed-consultation` — Phase 1 Complete
 
@@ -187,6 +187,16 @@ See [`services/pharmacy.md`](pharmacy.md) for the full gRPC interface catalog an
 9.4 **DispenseRequiresPayment:** Tenant config boolean embedded in `pharmacy_sale.process` trigger payload. Backbone reads from `tenant.dispense_requires_payment`; pharmacy reads from payload. TODO: step order swap in `PharmacySaleSagaBuilder` when `dispense_requires_payment=true`.
 
 9.5 **Auth:** `BACKBONE_API_KEY_PHARMACY` validates inbound pharmacy→backbone gRPC calls (ADR-007).
+
+---
+
+## 9.6 Cashier Proxy Pattern
+
+9.6.1 Backbone proxies gateway cashier calls to `wellmed-cashier` via `CASHIER_GRPC_ADDRESS`. No direct gateway→cashier routing exists. The proxied services are: `TransactionService`, `BillingService`, `InvoiceService`.
+
+9.6.2 **Auth:** `BACKBONE_API_KEY_CASHIER` is injected as `x-service-key` metadata on backbone→cashier gRPC calls. Cashier's `AuthInterceptor` validates this key (ADR-007).
+
+9.6.3 **Saga:** Backbone publishes cashier saga triggers to the `wellmed.saga` exchange. Cashier binds 8 queues for the `patient` saga (4 trigger + 4 compensate for `POSTransaction_*` steps). Cashier reports step results via `SagaCallbackService.ReportStepResult`.
 
 ---
 
