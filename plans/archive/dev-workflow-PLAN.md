@@ -25,9 +25,9 @@
 
 ## 1.3 Backbone Housekeeping
 
-- [ ] Drop `props` column from `practitioner_evaluation` table — confirm zero non-empty rows first (see Section 2 pre-flight 2.4), then run Phase 6 SQL + remove `Props` field from `entity/emr/practitioner_evaluation.go` in both repos
-- [ ] Drop `props` column from `prescription` table — same pre-flight check required (see 2.4)
-- [ ] Audit non-clinical tables with props columns for empty/unused props (geographic tables: provinces, districts, subdistricts, villages; access control: roles, permissions, personal_access_tokens; product: versions, installed_features) — drop column where consistently null
+- [X] Drop `props` column from `practitioner_evaluation` table — confirm zero non-empty rows first (see Section 2 pre-flight 2.4), then run Phase 6 SQL + remove `Props` field from `entity/emr/practitioner_evaluation.go` in both repos
+- [X] Drop `props` column from `prescription` table — same pre-flight check required (see 2.4)
+- [X] Audit non-clinical tables with props columns for empty/unused props (geographic tables: provinces, districts, subdistricts, villages; access control: roles, permissions, personal_access_tokens; product: versions, installed_features) — drop column where consistently null
 
 ## 1.4 Documentation Gaps
 
@@ -43,7 +43,7 @@ Code changes for Phases 1–3 are **complete and committed** in both backbone an
 
 ## 2.1 Pre-flight (DB — do before data cleanup)
 
-- [ ] **2.1a** Confirm `visit_patient_id` FK column has a B-tree index on `visit_registrations` in dev:
+- [X] **2.1a** Confirm `visit_patient_id` FK column has a B-tree index on `visit_registrations` in dev:
   ```sql
   CREATE INDEX IF NOT EXISTS idx_vr_visit_patient_id ON emr_2026.visit_registrations (visit_patient_id);
   ```
@@ -52,7 +52,7 @@ Code changes for Phases 1–3 are **complete and committed** in both backbone an
   DROP INDEX IF EXISTS emr_2026.idx_vr_props_patient_id;
   -- then: EXPLAIN ANALYZE SELECT ... FROM visit_registrations WHERE visit_patient_id = '...'
   ```
-- [ ] **2.1c** Confirm zero non-empty rows in prod for the columns targeted for drop in Phase 6:
+- [X] **2.1c** Confirm zero non-empty rows in prod for the columns targeted for drop in Phase 6:
   ```sql
   SELECT COUNT(*) FROM emr_2026.practitioner_evaluations WHERE props IS NOT NULL AND props::text != '{}';
   SELECT COUNT(*) FROM emr_2026.prescriptions WHERE props IS NOT NULL AND props::text != '{}';
@@ -120,9 +120,9 @@ Strip dead `prop_*` keys from all existing rows. Runs after Phases 1–3 are liv
 
 ## 5.1 Pharmacy MS Extraction
 
-- [ ] Write scoping plan (similar to `plans/consultation-extraction/`) — define which backbone domains move out
-- [ ] Likely scope: pharmacy_sale domain + related saga builders
-- [ ] Create `wellmed-pharmacy` repo, proto definitions, gRPC service registration
+- [X] Write scoping plan (similar to `plans/consultation-extraction/`) — define which backbone domains move out
+- [X] Likely scope: pharmacy_sale domain + related saga builders
+- [X] Create `wellmed-pharmacy` repo, proto definitions, gRPC service registration
 
 ## 5.2 Scheduling MS Extraction
 
