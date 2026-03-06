@@ -25,14 +25,14 @@
 | **Language** | Go 1.25+ |
 | **gRPC address** | `CONSULTATION_GRPC_ADDRESS` (env on gateway) |
 | **gRPC port** | `:50052` |
-| **Module** | `github.com/Kalpa-Health/wellmed-consultation` |
+| **Module** | `github.com/kalpa-health/wellmed-consultation` |
 
 ---
 
 ## 3. Key Responsibilities
 
 - **Clinical visit lifecycle ownership** — `visit_id` generated here, all clinical records owned here. No module duplicates these models (ADR-006 §2.1).
-- **8 gRPC services covering full visit workflow** — from frontline registration through assessment, treatment, examination, referral, and doctor sign-off.
+- **10 gRPC services covering full visit and prescription workflow** — from frontline registration through assessment, treatment, examination, referral, prescription finalization, and medication request coordination.
 - **Saga participant** — receives step triggers from Backbone via RabbitMQ (Phase 2), reports results via `SagaCallbackService`. Does not orchestrate; Backbone is the sole orchestrator (ADR-005).
 - **CanonicalVisitService client** — writes final visit record (diagnosis codes, treatment summary, sign_off_at) to Backbone on doctor sign-off. This is the only permitted Consultation→Backbone call (ADR-006 §2.4).
 - **Multi-tenant database access** — one PostgreSQL database per tenant, per-service schema isolation (same `ConnectionManager` pattern as Backbone).
@@ -41,20 +41,22 @@
 
 ## 4. gRPC Interface Catalog
 
-4.1 8 services registered at `:50052`:
+4.1 10 services registered at `:50052`:
 
 ### 4.1 gRPC Services
 
 | # | Service | Key Methods |
 |---|---------|-------------|
 | 1 | AssessmentService | Index |
-| 2 | FrontlineService | Store, Index |
+| 2 | FrontlineService | Store, Index, Dispense, FinalizePrescription |
 | 3 | ReferralService | Store, Index, Show |
 | 4 | TreatmentService | Store, Index |
 | 5 | VisitExaminationService | Store, Index, Show |
 | 6 | VisitPatientService | Index, Show, Store |
 | 7 | VisitRegistrationService | Index, ShowDetail |
 | 8 | VisitRegistrationReferralService | Store, Show, Index |
+| 9 | PrescriptionService | Finalize (wired); Create, Update, GetAll, GetById (stubs) |
+| 10 | MedicationRequestService | Create (wired); Approve, Reject, Index, Show (stubs) |
 
 ### 4.2 Sub-modules (no standalone gRPC — used internally)
 
@@ -64,6 +66,12 @@
 | `examination_treatment` | Links examinations to treatment records |
 | `medical_service_treatment` | Medical service items on treatment plans |
 | `practitioner_evaluation` | Doctor evaluation records on sign-off |
+
+### 4.3 Notes on PrescriptionService and MedicationRequestService
+
+- `FrontlineService.FinalizePrescription` is the primary doctor-facing entry point for finalizing prescriptions. It delegates internally to `PrescriptionService.Finalize`, which writes prescription records and (Phase 2) triggers the `prescription.create` saga via `SagaCallbackClient`.
+- `PrescriptionService` and `MedicationRequestService` are registered as first-class gRPC services for internal tooling, future direct calls, and parallel proto contract with `wellmed-pharmacy`.
+- Both use the same proto contracts as pharmacy (`prescriptionpb`, `medicationrequestpb`) — parallel implementations, not a shared service.
 
 ---
 
@@ -138,3 +146,4 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 05 Mar 2026 | Alex + Claude | Initial service doc — extracted from Backbone per ADR-002 |
+| 1.1 | 06 Mar 2026 | Alex + Claude | Added PrescriptionService (#9) and MedicationRequestService (#10); updated service count to 10; added §4.3 notes on prescription finalization placement; fixed module path casing. |

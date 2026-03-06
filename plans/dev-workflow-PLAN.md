@@ -25,8 +25,8 @@
 
 ## 1.3 Backbone Housekeeping
 
-- [ ] Drop `props` column from `practitioner_evaluation` table — always empty/null, never written
-- [ ] Drop `props` column from `prescription` table — no BuildProps calls in service layer
+- [ ] Drop `props` column from `practitioner_evaluation` table — confirm zero non-empty rows first (see Section 2 pre-flight 2.4), then run Phase 6 SQL + remove `Props` field from `entity/emr/practitioner_evaluation.go` in both repos
+- [ ] Drop `props` column from `prescription` table — same pre-flight check required (see 2.4)
 - [ ] Audit non-clinical tables with props columns for empty/unused props (geographic tables: provinces, districts, subdistricts, villages; access control: roles, permissions, personal_access_tokens; product: versions, installed_features) — drop column where consistently null
 
 ## 1.4 Documentation Gaps
@@ -37,14 +37,65 @@
 
 ---
 
-# 2. Props Resolution (Output of Plan 1 Review)
+# 2. Props Resolution (ADR-008 — see `plans/props-migration/`)
 
-- [ ] Complete props module review session using `plans/props-module-review/props-module-review-PLAN.md`
-- [ ] Execute `[C]` decisions — write migration SQL for columnized fields, backfill from props JSON, add indexes
-- [ ] Execute `[J]` decisions — rewrite service methods to use JOINs instead of props snapshots, update response builders
-- [ ] Execute `[D]` decisions — remove unused props keys after confirming no frontend dependency
-- [ ] Replace `visit_registrations` B-tree expression index (`idx_vr_props_patient_id`) with proper column index once patient_id is columnized
-- [ ] Update `helper.BuildProps()` callers as modules are resolved — track which modules still need the function
+Code changes for Phases 1–3 are **complete and committed** in both backbone and consultation. Remaining steps are database operations that must run in sequence after the wider dev push is deployed.
+
+## 2.1 Pre-flight (DB — do before data cleanup)
+
+- [ ] **2.1a** Confirm `visit_patient_id` FK column has a B-tree index on `visit_registrations` in dev:
+  ```sql
+  CREATE INDEX IF NOT EXISTS idx_vr_visit_patient_id ON emr_2026.visit_registrations (visit_patient_id);
+  ```
+- [ ] **2.1b** Drop the old expression index in dev and confirm query plan switches to FK path:
+  ```sql
+  DROP INDEX IF EXISTS emr_2026.idx_vr_props_patient_id;
+  -- then: EXPLAIN ANALYZE SELECT ... FROM visit_registrations WHERE visit_patient_id = '...'
+  ```
+- [ ] **2.1c** Confirm zero non-empty rows in prod for the columns targeted for drop in Phase 6:
+  ```sql
+  SELECT COUNT(*) FROM emr_2026.practitioner_evaluations WHERE props IS NOT NULL AND props::text != '{}';
+  SELECT COUNT(*) FROM emr_2026.prescriptions WHERE props IS NOT NULL AND props::text != '{}';
+  ```
+
+## 2.2 Phase 4 — Data Cleanup Migration (after deploy to staging)
+
+Strip dead `prop_*` keys from all existing rows. Runs after Phases 1–3 are live so no new snapshot data is being written.
+
+- [ ] Run the following on **staging** first, verify row counts, spot-check sample rows:
+  ```sql
+  UPDATE emr_2026.visit_registrations
+  SET props = (SELECT jsonb_object_agg(key, value) FROM jsonb_each(props) WHERE key NOT LIKE 'prop_%')
+  WHERE props::text != '{}' AND EXISTS (SELECT 1 FROM jsonb_object_keys(props) k WHERE k LIKE 'prop_%');
+
+  UPDATE emr_2026.visit_patients
+  SET props = (SELECT jsonb_object_agg(key, value) FROM jsonb_each(props) WHERE key NOT LIKE 'prop_%')
+  WHERE props::text != '{}' AND EXISTS (SELECT 1 FROM jsonb_object_keys(props) k WHERE k LIKE 'prop_%');
+
+  UPDATE emr_2026.referrals
+  SET props = (SELECT jsonb_object_agg(key, value) FROM jsonb_each(props) WHERE key NOT LIKE 'prop_%')
+  WHERE props::text != '{}' AND EXISTS (SELECT 1 FROM jsonb_object_keys(props) k WHERE k LIKE 'prop_%');
+  ```
+- [ ] Run in **prod** during low-traffic window (batch if tables are large)
+
+## 2.3 Phase 5 — Drop Expression Index (after Phase 4 in prod)
+
+- [ ] Drop the expression index in prod (pre-flight 2.1b covers dev/staging):
+  ```sql
+  DROP INDEX IF EXISTS emr_2026.idx_vr_props_patient_id;
+  ```
+
+## 2.4 Phase 6 — Drop Unused Props Columns (after pre-flight 2.1c confirms zero rows)
+
+- [ ] Run in staging then prod:
+  ```sql
+  ALTER TABLE emr_2026.practitioner_evaluations DROP COLUMN IF EXISTS props;
+  ALTER TABLE emr_2026.prescriptions DROP COLUMN IF EXISTS props;
+  ```
+- [ ] Remove `Props` field from `entity/emr/practitioner_evaluation.go` and `entity/emr/prescription.go` in both backbone and consultation — PR after DB column is dropped
+
+## 2.5 Remaining Non-DB Props Items
+
 - [ ] Proto contract typing for clinical modules — replace `string data` / `string payload` with typed proto messages in the 8 clinical module protos (gateway + backbone + consultation coordinated change)
 - [ ] Consument type formalization — define `BillingParty` typed struct to replace `interface{}` in transaction meta, align across POS and gateway
 
@@ -104,3 +155,4 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 05 Mar 2026 | Alex | Initial task list from audit review discussion + codebase analysis |
+| 1.1 | 06 Mar 2026 | Alex | Section 2 rewritten: props code changes complete (Phases 1–3), remaining DB steps sequenced as 2.1–2.4 |

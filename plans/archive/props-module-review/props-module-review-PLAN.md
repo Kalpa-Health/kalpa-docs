@@ -30,6 +30,8 @@ All `prop_` prefixed keys were created by `helper.BuildProps()` (`wellmed-backbo
 
 **In Go, this pattern is largely unnecessary.** GORM's `Preload()` or explicit JOINs solve the same problem without data duplication. The exception is when the snapshot has *business meaning* (e.g., "what was the patient's name at the time of this visit" for the visit artifact).
 
+//Team agrees J
+
 ## 2.2 The indexed prop
 
 `visit_registrations` has a B-tree expression index:
@@ -40,14 +42,16 @@ ON emr_2026.visit_registrations ((props->'prop_visit_patient'->'patient'->>'id')
 
 This is a leading indicator for columnization. A field important enough to index should be a column.
 
+//Team agrees C
+
 ## 2.3 Models with props column but NO data ever written
 
-| Model | Entity File | Status |
+| Model | Entity File | Status | Decision | Notes
 |-------|------------|--------|
-| PractitionerEvaluation | `entity/emr/practitioner_evaluation.go` | Always `{}` or null — safe to drop column |
-| Prescription | `entity/emr/prescription.go` | No BuildProps calls in service — safe to drop column |
+| PractitionerEvaluation | `entity/emr/practitioner_evaluation.go` | Always `{}` or null — safe to drop column | J |  
+| Prescription | `entity/emr/prescription.go` | No BuildProps calls in service — safe to drop column | K |
 
-**Decision needed:** [ ] Drop `props` column from these two tables via migration?
+**Decision needed:** Are there other `props` columns from these two tables via migration - could be for various reasons they have none?
 
 ---
 
@@ -63,13 +67,13 @@ This is a leading indicator for columnization. A field important enough to index
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prop_visit_patient` | Nested: id, visit_code, flag, visited_at, patient_type_service_id, status | Snapshot | [ ] |
-| `prop_visit_patient.patient` | Nested: id, uuid, name, medical_record, profile, patient_type_id/name, patient_occupation_id/name | Snapshot | [ ] |
-| `prop_visit_patient.patient.people` | Nested: id, uuid, name, first_name, last_name, dob, pob, age, sex, phone_1, phone_2 | Snapshot | [ ] |
-| `prop_visit_patient.patient.card_identity` | Nested: medical_record, old_medical_record, ihs_number, bpjs | Snapshot | [ ] |
-| `prop_visit_patient.patient.people.card_identity` | Nested: nik, sim, passport, visa, kk, npwp | Snapshot | [ ] |
-| `prop_visit_examination` | Nested: id, visit_examination_code, patient_id, visit_patient_id, is_commit, sign_off_at, is_addendum, status | Snapshot | [ ] |
-| `prop_medic_service` | Nested: id, name, flag, label | Snapshot | [ ] |
+| `prop_visit_patient` | Nested: id, visit_code, flag, visited_at, patient_type_service_id, status | Snapshot | [J] |
+| `prop_visit_patient.patient` | Nested: id, uuid, name, medical_record, profile, patient_type_id/name, patient_occupation_id/name | Snapshot | [J] |
+| `prop_visit_patient.patient.people` | Nested: id, uuid, name, first_name, last_name, dob, pob, age, sex, phone_1, phone_2 | Snapshot | [J] |
+| `prop_visit_patient.patient.card_identity` | Nested: medical_record, old_medical_record, ihs_number, bpjs | Snapshot | [J] |
+| `prop_visit_patient.patient.people.card_identity` | Nested: nik, sim, passport, visa, kk, npwp | Snapshot | [J] |
+| `prop_visit_examination` | Nested: id, visit_examination_code, patient_id, visit_patient_id, is_commit, sign_off_at, is_addendum, status | Snapshot | [J] |
+| `prop_medic_service` | Nested: id, name, flag, label | Snapshot | [J] |
 
 **Notes:**
 - This is the most deeply nested props structure in the system
@@ -92,16 +96,16 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prop_patient_type_service` | id, parent_id, name, flag, label | Snapshot | [ ] |
-| `prop_family_role` | Unicode family role reference | Snapshot | [ ] |
-| `prop_medic_service` | id, name, label, flag | Snapshot | [ ] |
-| `prop_patient` | Full patient: id, uuid, name, medical_record, profile, patient_type_id/name | Snapshot | [ ] |
+| `prop_patient_type_service` | id, parent_id, name, flag, label | Snapshot | [J] |
+| `prop_family_role` | Unicode family role reference | Snapshot | [J] |
+| `prop_medic_service` | id, name, label, flag | Snapshot | [J] |
+| `prop_patient` | Full patient: id, uuid, name, medical_record, profile, patient_type_id/name | Snapshot | [J] |
 | `prop_patient.people` | Full people: id, uuid, name, first_name, last_name, dob, pob, age, sex, card_identity (nik, sim, etc), phone_1, phone_2 | Snapshot | [ ] |
-| `prop_patient.card_identity` | medical_record, old_medical_record, ihs_number, bpjs | Snapshot | [ ] |
-| `prop_visit_registration` | id, visit_registration_code, visit_patient_type, status | Snapshot | [ ] |
-| `tenant_id` | Tenant identifier (base map, not prop_ prefixed) | Business | [ ] |
-| `name` | Patient name (base map) | Business | [ ] |
-| `status` | Visit status (base map, default "PROCESSING") | Business | [ ] |
+| `prop_patient.card_identity` | medical_record, old_medical_record, ihs_number, bpjs | Snapshot | [J] |
+| `prop_visit_registration` | id, visit_registration_code, visit_patient_type, status | Snapshot | [J] |
+| `tenant_id` | Tenant identifier (base map, not prop_ prefixed) | Business | [C] |
+| `name` | Patient name (base map) | Business | [C] |
+| `status` | Visit status (base map, default "PROCESSING") | Business | [C] |
 
 **Notes:**
 - Two BuildProps versions exist (legacy + V2)
@@ -124,7 +128,7 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prop_visit_patient.patient.id` | Read via gjson for context extraction | Read-only | [ ] |
+| `prop_visit_patient.patient.id` | Read via gjson for context extraction | Read-only | [J] |
 
 **Notes:**
 - This service only READS from props (via gjson path), never writes
@@ -147,9 +151,9 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prescription_type` | String: MedicinePrescription, MedicToolPrescription, MixPrescription | Business | [ ] |
-| `created_at` | Timestamp | Business | [ ] |
-| Dynamic fields | Flattened prescription model data — varies by prescription_type | Business | [ ] |
+| `prescription_type` | String: MedicinePrescription, MedicToolPrescription, MixPrescription | Business | [C] |
+| `created_at` | Timestamp | Business | [C] |
+| Dynamic fields | Flattened prescription model data — varies by prescription_type | Business | [K] |
 
 **Notes:**
 - NO `prop_` prefix — these are direct business fields
@@ -171,9 +175,9 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prop_medic_service` | id, name, label, flag | Snapshot | [ ] |
-| `prop_external_referral` | External referral business data (varies by referral type) | Business | [ ] |
-| (empty `{}`) | Inpatient referrals store empty props | N/A | [ ] |
+| `prop_medic_service` | id, name, label, flag | Snapshot | [J] |
+| `prop_external_referral` | External referral business data (varies by referral type) | Business | [J] |
+| (empty `{}`) | Inpatient referrals store empty props | N/A | [K] |
 
 **Notes:**
 - Three referral paths: external, outpatient, inpatient
@@ -196,8 +200,8 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prop_patient_type_service` | id, flag, name, label | Snapshot | [ ] |
-| POS transaction props | Sent as `"{}"` (empty) to POS system | N/A | [ ] |
+| `prop_patient_type_service` | id, flag, name, label | Snapshot | [J] |
+| POS transaction props | Sent as `"{}"` (empty) to POS system | N/A | [K] |
 
 **Notes:**
 - Minimal props usage — only Step 1 (CreateVisitPatient) sets prop_patient_type_service
@@ -218,8 +222,8 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| `prop_visit_patient` | Full VisitPatient map (extracted from parent props) | Snapshot | [ ] |
-| `prop_medic_service` | id, flag, label, name | Snapshot | [ ] |
+| `prop_visit_patient` | Full VisitPatient map (extracted from parent props) | Snapshot | [J] |
+| `prop_medic_service` | id, flag, label, name | Snapshot | [J] |
 
 **Notes:**
 - Creates new VisitRegistration records for referral workflows
@@ -241,8 +245,8 @@ Decision notes:
 
 | Key | Contents | Type | Decision |
 |-----|----------|------|----------|
-| (no `prop_` prefix) | Raw examination data: Anthropometry, VitalSign, Symptom, etc. | Business | [ ] |
-| Dynamic morphs | Variable shape per assessment type | Business | [ ] |
+| (no `prop_` prefix) | Raw examination data: Anthropometry, VitalSign, Symptom, etc. | Business | [K] |
+| Dynamic morphs | Variable shape per assessment type | Business | [K] |
 
 **Notes:**
 - NO `prop_` prefix — uses marshalExamProps() with direct business data
@@ -256,20 +260,6 @@ Decision notes:
 
 ---
 
-# 4. Summary Decision Matrix
-
-After completing the review above, fill in this summary:
-
-| Module | prop_ Snapshot Keys | Business Keys | Recommended Action |
-|--------|-------------------|---------------|-------------------|
-| visit_registration | 3 (visit_patient, visit_examination, medic_service) | 0 | |
-| visit_patient | 4 (patient_type_service, family_role, medic_service, patient) + visit_registration | 3 (tenant_id, name, status) | |
-| visit_examination | 0 (reads only) | 0 | |
-| frontline | 0 | 2+ (prescription_type, dynamic) | |
-| referral | 1 (medic_service) | 1 (external_referral) | |
-| pharmacy_sale | 1 (patient_type_service) | 0 | |
-| visit_registration_referral | 2 (visit_patient, medic_service) | 0 | |
-| assessment | 0 | Variable (exam data) | |
 
 **Quick counts:**
 - `prop_medic_service` appears in: visit_registration, visit_patient, referral, visit_registration_referral (4 modules)
