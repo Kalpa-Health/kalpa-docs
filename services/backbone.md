@@ -36,7 +36,7 @@
 - **Canonical visit record reception** — receives FHIR-shaped visit outcome from Consultation on doctor sign-off. This is the record used for SATU SEHAT sync, closed invoices, and audit (ADR-002 §2.4).
 - **Auth** — JWT issuance, validation, Redis session management.
 - **Multi-tenant database access** — one PostgreSQL database per tenant, per-service schema isolation.
-- **POS pass-through** — Transaction, Billing, Invoice services are saga-orchestrated downstream calls to `wellmed-pos`, not business logic Backbone owns.
+- **Cashier pass-through** — Transaction, Billing, Invoice services are proxy pass-throughs to `wellmed-cashier` (`:50053`). Backbone does not own these — it forwards the call via `CASHIER_GRPC_ADDRESS`.
 
 ---
 
@@ -56,13 +56,13 @@
 | 6 | PatientService (canonical) | GetAll, GetById, Store |
 | 7 | ItemService | GetAll, Store |
 | 8 | PharmacySaleService | GetAll, GetById, Store |
-| 9 | TransactionService | → POS pass-through |
-| 10 | BillingService | → POS pass-through |
-| 11 | InvoiceService | → POS pass-through |
+| 9 | TransactionService | → Cashier pass-through (`wellmed-cashier :50053`) |
+| 10 | BillingService | → Cashier pass-through (`wellmed-cashier :50053`) |
+| 11 | InvoiceService | → Cashier pass-through (`wellmed-cashier :50053`) |
 
 ### 4.2 Extracted to `wellmed-consultation` — Phase 1 Complete
 
-These 8 services moved to `wellmed-consultation` at `:50052` as of 05 Mar 2026 (ADR-002 Phase 1). They are no longer registered in Backbone.
+These 10 services moved to `wellmed-consultation` at `:50052` as of 05–06 Mar 2026 (ADR-002 Phase 1, ADR-010). They are no longer registered in Backbone.
 
 | # | Service | Now In |
 |---|---------|--------|
@@ -73,11 +73,26 @@ These 8 services moved to `wellmed-consultation` at `:50052` as of 05 Mar 2026 (
 | — | VisitRegistrationReferralService | `wellmed-consultation` `:50052` |
 | — | VisitExaminationService | `wellmed-consultation` `:50052` |
 | — | ReferralService | `wellmed-consultation` `:50052` |
-| — | FrontlineService | `wellmed-consultation` `:50052` |
+| — | FrontlineService (incl. FinalizePrescription) | `wellmed-consultation` `:50052` |
+| — | PrescriptionService | `wellmed-consultation` `:50052` |
+| — | MedicationRequestService | `wellmed-consultation` `:50052` |
 
 See [`services/consultation.md`](consultation.md) for the full gRPC interface catalog.
 
-### 4.3 New Backbone Services
+### 4.3 Extracted to `wellmed-pharmacy` — Phase 1 Complete
+
+These 4 services are proxied from Backbone to `wellmed-pharmacy` at `:50054` as of 06 Mar 2026 (ADR-010). Gateway calls Backbone; Backbone proxies via `PHARMACY_GRPC_ADDRESS`.
+
+| # | Service | Now In |
+|---|---------|--------|
+| — | PrescriptionService (pharmacy-side) | `wellmed-pharmacy` `:50054` |
+| — | MedicationRequestService (pharmacy-side) | `wellmed-pharmacy` `:50054` |
+| — | DispenseService | `wellmed-pharmacy` `:50054` |
+| — | PharmacySaleService | `wellmed-pharmacy` `:50054` |
+
+See [`services/pharmacy.md`](pharmacy.md) for the full gRPC interface catalog and Phase 1 stub status.
+
+### 4.4 New Backbone Services
 
 | # | Service | Purpose | ADR |
 |---|---------|---------|-----|
@@ -155,9 +170,39 @@ See [`services/consultation.md`](consultation.md) for the full gRPC interface ca
 
 ---
 
-## 9. Interrelations with Consultation
+## 9. Pharmacy Proxy Pattern
 
-9.1 Backbone and `wellmed-consultation` have a carefully bounded relationship. The interactions are non-obvious — this section exists to prevent accidental ADR-006 violations.
+9.1 Backbone proxies gateway pharmacy calls to `wellmed-pharmacy` via `PHARMACY_GRPC_ADDRESS`. No direct gateway→pharmacy routing exists (ADR-010 §2.2).
+
+9.2 Backbone enriches item catalog data before publishing saga triggers to pharmacy — the `EnrichPrescriptionItems` local step embeds catalog data into the saga context; pharmacy reads from the trigger payload and never calls `ItemService` (ADR-006).
+
+9.3 **New saga types registered in backbone for pharmacy:**
+
+| Saga Type | Saga Builder | Steps |
+|-----------|-------------|-------|
+| `prescription.create` | `PrescriptionCreateSagaBuilder` | 1. Local `EnrichPrescriptionItems` → 2. Remote `RecordPrescriptionInPharmacy` |
+| `pharmacy_sale` | `PharmacySaleSagaBuilder` | existing steps + Remote `Process` (pharmacy) + Remote `ProcessSaleTransaction` (POS stub) |
+| `pharmacist_visit` | `AtomicPharmacistVisitSagaBuilder` | 1. Local `CreateCanonicalPharmacistVisit` → 2. Remote `atomic.create` (pharmacy, always succeeds) |
+
+9.4 **DispenseRequiresPayment:** Tenant config boolean embedded in `pharmacy_sale.process` trigger payload. Backbone reads from `tenant.dispense_requires_payment`; pharmacy reads from payload. TODO: step order swap in `PharmacySaleSagaBuilder` when `dispense_requires_payment=true`.
+
+9.5 **Auth:** `BACKBONE_API_KEY_PHARMACY` validates inbound pharmacy→backbone gRPC calls (ADR-007).
+
+---
+
+## 9.6 Cashier Proxy Pattern
+
+9.6.1 Backbone proxies gateway cashier calls to `wellmed-cashier` via `CASHIER_GRPC_ADDRESS`. No direct gateway→cashier routing exists. The proxied services are: `TransactionService`, `BillingService`, `InvoiceService`.
+
+9.6.2 **Auth:** `BACKBONE_API_KEY_CASHIER` is injected as `x-service-key` metadata on backbone→cashier gRPC calls. Cashier's `AuthInterceptor` validates this key (ADR-007).
+
+9.6.3 **Saga:** Backbone publishes cashier saga triggers to the `wellmed.saga` exchange. Cashier binds 8 queues for the `patient` saga (4 trigger + 4 compensate for `POSTransaction_*` steps). Cashier reports step results via `SagaCallbackService.ReportStepResult`.
+
+---
+
+## 10. Interrelations with Consultation
+
+10.1 Backbone and `wellmed-consultation` have a carefully bounded relationship. The interactions are non-obvious — this section exists to prevent accidental ADR-006 violations.
 
 **The only permitted runtime calls:**
 
@@ -168,13 +213,13 @@ See [`services/consultation.md`](consultation.md) for the full gRPC interface ca
 
 No other calls are permitted. Backbone never calls Consultation's gRPC services. Consultation never calls Backbone's patient/employee/item services directly.
 
-9.2 **How data flows from Backbone into Consultation:** Backbone composes the full step payload into the RabbitMQ trigger. Consultation reads from that payload and never fetches from Backbone at runtime. If a step needs `patient_name`, Backbone includes it in the trigger.
+10.2 **How data flows from Backbone into Consultation:** Backbone composes the full step payload into the RabbitMQ trigger. Consultation reads from that payload and never fetches from Backbone at runtime. If a step needs `patient_name`, Backbone includes it in the trigger.
 
-9.3 **How `visit_id` flows after visit creation:** Consultation creates the visit (owns the ULID), calls back with `{visit_id}` in the saga callback payload. Backbone stores `visit_id` in `SagaContext` and threads it into subsequent step payloads (POS billing, pharmacy, sign-off).
+10.3 **How `visit_id` flows after visit creation:** Consultation creates the visit (owns the ULID), calls back with `{visit_id}` in the saga callback payload. Backbone stores `visit_id` in `SagaContext` and threads it into subsequent step payloads (POS billing, pharmacy, sign-off).
 
-9.4 **Consultation source code still in Backbone during transition:** Modules `visit_patient`, `visit_examination`, `assessment`, `treatment`, `frontline`, `referral`, `family_relationship` exist in both repos. Backbone's copy is used only by the `patient` saga builder (new-patient registration flow creates a patient + first visit in one saga). These will be removed from Backbone once the `patient` saga builder is refactored to use a Remote `create_visit` step. See `application.go` lines 13–17.
+10.4 **Consultation source code still in Backbone during transition:** Modules `visit_patient`, `visit_examination`, `assessment`, `treatment`, `frontline`, `referral`, `family_relationship` exist in both repos. Backbone's copy is used only by the `patient` saga builder (new-patient registration flow creates a patient + first visit in one saga). These will be removed from Backbone once the `patient` saga builder is refactored to use a Remote `create_visit` step. See `application.go` lines 13–17.
 
-9.5 **Wiring status as of 05 Mar 2026:**
+10.5 **Wiring status as of 05 Mar 2026:**
 
 | Item | Status |
 |------|--------|
@@ -190,7 +235,7 @@ Full wiring plan: `kalpa-docs/plans/visit-saga-wiring/visit-saga-wiring-PLAN.md`
 
 ---
 
-## 10. Service-Specific Documentation
+## 11. Service-Specific Documentation
 
 | Document | Location |
 |----------|---------|
@@ -213,3 +258,4 @@ Full wiring plan: `kalpa-docs/plans/visit-saga-wiring/visit-saga-wiring-PLAN.md`
 | 1.1 | 05 Mar 2026 | Alex + Claude | BB-1 through BB-4: Updated Backbone role to three-role model (canonical model owner, saga orchestrator, auth/config); updated §3 responsibilities to remove stale sync/business-logic framing; split §4 gRPC catalog into three subsections (staying, extracting to consultation, new saga services); replaced §6 saga framework with ADR-005-aligned async-only description including callback envelope, REJECTED/FAILED distinction, and RabbitMQ convention. |
 | 1.2 | 05 Mar 2026 | Alex + Claude | §4.2 updated: 8 consultation services extracted to wellmed-consultation (ADR-002 Phase 1 complete). §4.1 count updated 22→14. |
 | 1.3 | 05 Mar 2026 | Alex + Claude | Added §9 Interrelations with Consultation — boundary rules, data flow patterns, visit_id threading, transition-period duplicate source note, wiring status table. References visit-saga-wiring plan. |
+| 1.4 | 06 Mar 2026 | Alex + Claude | Added §9 Pharmacy Proxy Pattern — new saga types (prescription.create, pharmacy_sale updates, pharmacist_visit), dispense_requires_payment, PHARMACY_GRPC_ADDRESS, ADR-010 auth. Added §4.3 pharmacy proxy services table. Updated §4.2 to 10 consultation services. Renumbered §9–§11. |

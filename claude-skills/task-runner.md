@@ -40,6 +40,7 @@ Plan files use this structure:
 **Author:** Name
 **ADR:** [optional link to ADR]
 **Status:** Draft | Ready to execute | In Progress
+**Branch:** (optional) feature/[branch-name] — if omitted, task-runner derives `feature/<plan-stem>` from the filename
 
 ## Related Docs
 <!-- Scope the pre-flight check. List architecture docs, READMEs, ADRs, and specs relevant to this plan. -->
@@ -114,6 +115,17 @@ Before executing any tasks, run Phase 0. If it already appears in PROGRESS.md as
 
 5.5 If everything passes, log Phase 0 as ✅ DONE and proceed to Phase 1.
 
+5.6 **Branch detection** — Determine the working branch:
+- If the plan has a `**Branch:**` field: confirm with the user — "Plan specifies branch `<branch>`. Confirm this is correct before we proceed." Wait for confirmation before continuing.
+- If the plan has no `**Branch:**` field: derive a name as `feature/<plan-stem>` (e.g., `cashier-standards-PLAN.md` → `feature/cashier-standards`). Announce it: "No branch specified — will use `feature/<derived-name>`."
+- If git is not initialized in the repo, skip branch management entirely and note this in the log.
+
+5.7 **Branch checkout** — Once the branch name is confirmed:
+- If the branch already exists locally: `git checkout <branch>`
+- If it doesn't exist locally: `git checkout -b <branch>`
+- **Never execute tasks on `main` or `master`.** If the current branch is main/master after this step, stop and report an error.
+- Log the branch name in the progress file under Phase 0.
+
 ## 6. Execution Rules
 
 6.1 On each invocation, read the plan file and the progress file. Find the first task that does NOT have a corresponding entry in the progress file (or has a ❌ FAILED entry that should be retried).
@@ -131,6 +143,7 @@ Before executing any tasks, run Phase 0. If it already appears in PROGRESS.md as
 6.7 At the start of each session, print a brief status summary:
 ```
 📋 Plan: [Project Name]  ([filename])
+🌿 Branch: [current branch]
 📍 Current: Phase X, Task X.Y — [Task Title]
 ✅ Completed: N/M tasks
 ⏸️ Status: [Ready to execute / Waiting on human / Failed — needs review]
@@ -146,7 +159,7 @@ Before executing any tasks, run Phase 0. If it already appears in PROGRESS.md as
 
 7.4 **Stay in scope.** Each task has defined inputs, actions, and outputs. Don't do extra work beyond what the task specifies — the plan is sequenced deliberately.
 
-7.5 **Commit after each task.** If git is initialized, commit after each completed task with message format: `plan: [Task X.Y] [brief description]`. This makes it easy to review and roll back individual tasks.
+7.5 **Commit after each task; push after each phase.** If git is initialized, commit after each completed AI task with message format: `plan: [Task X.Y] [brief description]`. When all tasks in a phase are complete (at a CHECKPOINT or phase boundary), run `git push origin <branch>` to back up progress to the remote. PRs are created manually — do not open them.
 
 7.6 **On resume, summarize what happened.** If the user returns after a break, read the progress file and give a brief summary of where things stand before continuing.
 
