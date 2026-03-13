@@ -17,9 +17,9 @@ Created 4 missing core polymorphic entities:
 
 | File | Table | Status |
 |------|-------|--------|
-| `model_has_encoding.go` | `model_has_encoding` | ✅ Created |
+| `model_has_encoding.go` | `model_has_encodings` | ✅ Created |
 | `model_has_relation.go` | `model_has_relations` | ✅ Created |
-| `model_has_organization.go` | `model_has_organization` | ✅ Created |
+| `model_has_organization.go` | `model_has_organizations` | ✅ Created |
 | `model_has_monitoring.go` | `model_has_monitorings` | ✅ Created |
 
 ---
@@ -73,19 +73,25 @@ Created 5 system entities:
 
 ---
 
-## Phase B: Update Migration Infrastructure
+## Phase B: Update Migration Infrastructure ✅ COMPLETE
 
-### Phase B.1: Update unified.go
-**Status:** ⏳ Pending
+### Phase B.1: Update Migration Files
+**Commit:** (pending)
+**Date:** 2026-03-13
 
-- [ ] Add new entities to MigrateAll()
-- [ ] Group entities by connection (central, tenant, emr, pos, scm)
+Updated migration files to include new entities:
+
+| File | Changes |
+|------|---------|
+| `unified.go` | Added ApiAccess, LogHistory, Workspace to main DB; Added SCM migration call |
+| `lite/migration.go` | Added ModelHasEncoding, ModelHasRelation, ModelHasOrganization, ModelHasMonitoring, Appointment, Notification |
+| `plus/migration.go` | Added all LITE entities + Attendance, AbsenceRequest, Worker, EmployeeHasType, EmployeeShift |
 
 ### Phase B.2: Create SCM Migration
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-- [ ] Create `internal/db/migration/scm/migration.go`
-- [ ] Add SCM entities to AutoMigrate
+- [x] Create `internal/db/migration/scm/migration.go`
+- [x] Add SCM entities to AutoMigrate (Procurement, ProcurementList, PurchaseRequest, PurchaseOrder, ReceiveOrder, Distribution, CardStock, OpnameStock)
 
 ---
 
@@ -113,7 +119,7 @@ Created 5 system entities:
 | A.2 | Workforce Entities | ✅ Complete |
 | A.3 | SCM Entities | ✅ Complete |
 | A.4 | System Entities | ✅ Complete |
-| B | Migration Infrastructure | ⏳ Pending |
+| B | Migration Infrastructure | ✅ Complete |
 | C | CLI & Makefile | ⏳ Pending |
 
 **Total New Entities Created:** 22 entities across 17 files
