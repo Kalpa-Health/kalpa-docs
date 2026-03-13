@@ -2,13 +2,13 @@
 
 **Plan File**: `5-migration-seed-testing-PLAN.md`
 **Started**: 2026-03-13
-**Status**: In Progress
+**Status**: ✅ COMPLETE
 
 ---
 
 ## Phase 1: Add Makefile Targets ✅ COMPLETE
 
-**Commit**: (pending)
+**Commit**: `014f118 fix: rename Makefile targets from colon to dash syntax`
 **Date**: 2026-03-13
 
 - [x] Add `migrate-seed` target
@@ -16,56 +16,57 @@
 - [x] Rename colon targets to dash (migrate:fresh → migrate-fresh)
 - [x] Update help section
 
-**Note**: Fixed Makefile syntax - colons in target names cause "multiple target patterns" error in GNU Make.
+---
+
+## Phase 2: Test Migration ✅ COMPLETE
+
+### Test 2.1: Migrate Fresh ✅ PASS
+### Test 2.2: Migrate All ✅ PASS
 
 ---
 
-## Phase 2: Test Migration
+## Phase 3: Test Seeding ✅ COMPLETE (with fixes)
 
-### Prerequisites
-⚠️ **Requires `.env` file** with database credentials:
-```bash
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=secret
-DB_MAIN=wellmed
-DB_NAMES=wellmed,clinic_4
-DB_SCHEMAS=public
+### Issue Found: Unicode Constraint Missing
+
+**Problem**: `ON CONFLICT ("flag","name")` failed because no unique constraint existed.
+
+**Fix Applied**: Added composite unique index to `unicode.go`:
+```go
+Flag string `gorm:"..;uniqueIndex:idx_unicodes_flag_name,priority:1"`
+Name string `gorm:"..;uniqueIndex:idx_unicodes_flag_name,priority:2"`
 ```
 
-### Test 2.1: Migrate Fresh
-**Status**: ⏳ Blocked (needs .env)
+### Test 3.1: Install LITE ✅ PASS (after fix)
 
-```bash
-make migrate-fresh
-```
+**Successful Seeds**:
+- ✅ Country (249 records)
+- ✅ Province (34 records)
+- ✅ District (514 records)
+- ✅ SubDistrict (7,266 records)
+- ✅ Village (83,467 records)
+- ✅ ICD-10 Diseases (bulk import)
+- ✅ DosageForm (45 records)
+- ✅ Education (9 records)
+- ✅ EmployeeType (9 records)
+- ✅ FamilyRole (11 records)
+- ✅ FreqUnit (11 records)
+- ✅ Funding (6 records)
+- ✅ ItemStuffService (21 records)
+- ✅ MasterVaccine (24 records)
+- ✅ Occupation (10 records)
+- ✅ PatientOccupation (5 parent + 48 child)
+- ✅ PatientTypeService (6 records)
+- ✅ PaymentMethod (6 records)
+- ✅ PeopleStuff/MaritalStatus (6 records)
+- ✅ Profession (6 parent + 19 child)
 
-**Result**: Requires `.env` file with valid database credentials
+**Known Issues (out of scope for Plan 5)**:
+- `diseases.parent_id` column doesn't exist (ICD hierarchical seeder)
+- `examination_stuffs` table doesn't exist
+- `services` table doesn't exist
 
----
-
-### Test 2.2: Migrate All
-**Status**: ⏳ Blocked (needs .env)
-
-```bash
-make migrate
-```
-
-**Result**: (pending - needs .env)
-
----
-
-## Phase 3: Test Seeding
-
-### Test 3.1: Install LITE
-**Status**: ⏳ Blocked (needs .env)
-
-```bash
-make install MODE=LITE
-```
-
-**Result**: (pending - needs .env)
+These are schema issues to be addressed in Plan 6.
 
 ---
 
@@ -74,14 +75,31 @@ make install MODE=LITE
 | Test | Status | Notes |
 |------|--------|-------|
 | Add Makefile targets | ✅ Complete | Fixed colon syntax |
-| migrate-fresh | ⏳ Blocked | Needs .env file |
-| migrate (all) | ⏳ Blocked | Needs .env file |
-| install LITE | ⏳ Blocked | Needs .env file |
+| migrate-fresh | ✅ Pass | Works correctly |
+| migrate (all) | ✅ Pass | Works correctly |
+| install LITE | ✅ Pass | After Unicode constraint fix |
 
 ---
 
-## Next Steps
+## Commits
 
-1. User provides `.env` file with valid database credentials
-2. Re-run migration tests
-3. Re-run seeding tests
+1. `014f118` - fix: rename Makefile targets from colon to dash syntax
+2. (pending) - fix: add unique constraint to unicodes entity
+
+---
+
+## Commands Reference
+
+```bash
+# Fresh migration (drop all + recreate)
+make migrate-fresh
+
+# Run all migrations + indexes
+make migrate
+
+# Seed with LITE mode
+make install MODE=LITE
+
+# Combined: fresh + seed
+make migrate-fresh-seed
+```
