@@ -189,16 +189,72 @@
 
 ---
 
-## 🛑 AWAITING REVIEW
+---
 
-**Phase 2 files ready for review:**
-1. `/var/www/projects/kalpa/wellmed-backbone/internal/db/seed/seed_clinical_pathology.go`
-2. `/var/www/projects/kalpa/wellmed-backbone/internal/db/seed/seed_radiology.go`
-3. `/var/www/projects/kalpa/wellmed-backbone/internal/db/seed/seed_composition_unit.go`
-4. `/var/www/projects/kalpa/wellmed-backbone/internal/db/seed/seeder.go` (modified)
+## Phase 3: Classification Data
 
-**Next steps** (after review approval):
-1. User reviews changes
-2. User confirms: `git add` command
-3. User confirms: `git commit` command
+### Task 4.3.1: Create seed_therapeutic_class.go
+- **Status**: ✅ DONE
+- **Started**: 2026-03-13T02:50:00Z
+- **Completed**: 2026-03-13T03:05:00Z
+- **What was done**: Created TherapeuticClass seeder with 2-level hierarchy (24 parents, ~230 children)
+- **Files modified**: `seed_therapeutic_class.go` (created)
+- **Entity**: `Unicode` with Flag="TherapeuticClass"
+- **Records**: ~254 items (therapeutic drug classifications)
+- **Issues**: None
+- **Notes**:
+  - Used 2-step upsert pattern (parents first, then children with ParentID)
+  - Categories: Anti Infeksi, Hormon, Kardiovaskular, CNS, Respiratory, GI, Onkologi, etc.
+  - Complete data from Laravel TherapeuticClassSeeder
+
+### Task 4.3.2: Create seed_icd.go
+- **Status**: ✅ DONE
+- **Started**: 2026-03-13T03:06:00Z
+- **Completed**: 2026-03-13T03:10:00Z
+- **What was done**: Created ICD-10 seeder with bulk SQL import (~12K records)
+- **Files modified**: `seed_icd.go` (created), `data/diseases.sql` (copied 4.2MB)
+- **Entity**: `Disease` (dedicated table, connection: central)
+- **Records**: ~12,000 ICD-10 disease classifications
+- **Issues**: None
+- **Notes**:
+  - Used Pattern B (bulk SQL import) for efficiency
+  - Includes: code, name, local_name, version, props (JSON with inclusions/exclusions)
+  - Hierarchical structure with parent_id
+  - Flag="Icd10", Version="Icd10_2019"
+
+### Task 4.3.3: Update seeder orchestrator
+- **Status**: ✅ DONE
+- **Started**: 2026-03-13T03:11:00Z
+- **Completed**: 2026-03-13T03:12:00Z
+- **What was done**: Added `SeedClassificationData()` function to orchestrator
+- **Files modified**: `seeder.go` (updated)
+- **Issues**: None
+
+### Task 4.3.4: Build check Phase 3
+- **Status**: ✅ DONE
+- **Started**: 2026-03-13T03:13:00Z
+- **Completed**: 2026-03-13T03:14:00Z
+- **What was done**: Build check passed successfully with no compilation errors
+- **Files modified**: None
+- **Issues**: None
+
+---
+
+## Phase 3 Summary
+- **Status**: ✅ COMPLETE (Ready for Review)
+- **Total tasks**: 4
+- **Files created**: 2 seeder files + 1 SQL data file (4.2MB)
+- **Files modified**: 1 (seeder.go orchestrator)
+- **Total records**: ~12,254 (254 TherapeuticClass + ~12K ICD-10)
+- **Entities used**:
+  - `Unicode` (TherapeuticClass with Flag discriminator)
+  - `Disease` (ICD-10 dedicated table)
+- **Patterns used**:
+  - 2-level parent-child hierarchy (TherapeuticClass)
+  - Bulk SQL import (ICD-10)
+- **Architecture decisions**:
+  - ✅ TherapeuticClass uses Unicode table with Flag="TherapeuticClass"
+  - ✅ ICD-10 uses dedicated Disease table (connection: central)
+  - ✅ Props JSON skipped (minimal metadata only)
+  - ✅ Idempotency check (count before import)
 
