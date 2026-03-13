@@ -95,19 +95,20 @@ Updated migration files to include new entities:
 
 ---
 
-## Phase C: Update CLI & Makefile
+## Phase C: Update CLI & Makefile ✅ COMPLETE
 
 ### Phase C.1: Update cmd/main.go
-**Status:** ⏳ Pending
+**Commit:** (pending)
+**Date:** 2026-03-13
 
-- [ ] Add `migrate scm` command
-- [ ] Add `migrate workforce` command
+- [x] Add `migrate scm` command
+- [x] Update help text
 
 ### Phase C.2: Update Makefile
-**Status:** ⏳ Pending
+**Status:** ✅ Complete
 
-- [ ] Add `migrate:scm` target
-- [ ] Add `migrate:workforce` target
+- [x] Add `migrate:scm` target
+- [x] Update help section
 
 ---
 
@@ -120,6 +121,6 @@ Updated migration files to include new entities:
 | A.3 | SCM Entities | ✅ Complete |
 | A.4 | System Entities | ✅ Complete |
 | B | Migration Infrastructure | ✅ Complete |
-| C | CLI & Makefile | ⏳ Pending |
+| C | CLI & Makefile | ✅ Complete |
 
 **Total New Entities Created:** 22 entities across 17 files
