@@ -327,3 +327,85 @@
 
 **Status**: ✅ ALL PHASES COMPLETE & PRODUCTION-READY
 
+---
+
+## Post-Phase 2: Makefile & Seeder Completion
+
+### Session: 2026-03-13T05:00:00Z
+
+### Task: Create unified.go (Migration Infrastructure)
+- **Status**: ✅ DONE
+- **What was done**: Created unified migration infrastructure with MigrateAll, DropAll, MigrateFresh, MigrateAllIndexes, RollbackAllIndexes
+- **Files created**: `internal/db/migration/unified.go`
+- **Functions**:
+  - `MigrateAll()` - runs all migrations (main DB entities + tenant DB entities + all indexes)
+  - `DropAll()` - drops ALL tables from all databases (clean slate)
+  - `MigrateFresh()` - combines DropAll + MigrateAll
+  - `MigrateAllIndexes()` - creates all GIN trigram indexes (patient, village, disease, medicine)
+  - `RollbackAllIndexes()` - removes all indexes
+- **Issues**: None
+
+### Task: Update cmd/main.go with new subcommands
+- **Status**: ✅ DONE
+- **What was done**: Added new migrate subcommands and HQ install mode
+- **Files modified**: `cmd/main.go`
+- **New commands**:
+  - `migrate all` - run all migrations + all indexes
+  - `migrate fresh` - drop all tables + run fresh migrations
+  - `migrate disease-indexes [-rollback]` - disease GIN trigram indexes
+  - `migrate medicine-indexes [-rollback]` - medicine GIN trigram indexes
+  - `install HQ` - seed for HQ client installation (no ICD)
+- **Issues**: None
+
+### Task: Simplify Makefile
+- **Status**: ✅ DONE
+- **What was done**: Simplified migration commands, removed ARGS dependency, added migrate:index target
+- **Files modified**: `Makefile`
+- **Changes**:
+  - `make migrate` now runs `migrate all` by default
+  - `make migrate:fresh` now properly drops all tables and recreates
+  - Added `make migrate:index TYPE=<type>` for specific index operations
+  - Updated help documentation
+  - Added HQ mode to install command
+- **Issues**: None
+
+### Task: Complete Seeder System
+- **Status**: ✅ DONE
+- **What was done**: Completed SeedPlus, SeedE, and added SeedHQ
+- **Files modified**: `internal/db/seed/seeder.go`
+- **Changes**:
+  - `SeedPlus()` - complete with all reference data + PLUS-specific seeders (encoding, brand, trademark, etc.)
+  - `SeedE()` - now calls SeedPlus() (alias for enterprise mode)
+  - `SeedHQ()` - new function for HQ client installation (no ICD, no employees, no patients)
+- **Issues**: None
+
+---
+
+## Command Mapping Summary
+
+| Old Command | New Command |
+|-------------|-------------|
+| `make migrate ARGS='patient-indexes'` | `make migrate` (all included) |
+| `make migrate ARGS='village-indexes'` | `make migrate` (all included) |
+| `make migrate:fresh` (broken) | `make migrate:fresh` (works!) |
+| `make install MODE=LITE` | `make install MODE=LITE` (unchanged) |
+| `make install MODE=PLUS` | `make install MODE=PLUS` (complete) |
+| `make install MODE=E` | `make install MODE=E` (= PLUS) |
+| - | `make install MODE=HQ` (new) |
+
+---
+
+## Post-Phase 2 Summary
+- **Status**: ✅ COMPLETE
+- **Files created**: 1 (`unified.go`)
+- **Files modified**: 3 (`cmd/main.go`, `Makefile`, `seeder.go`)
+- **Build check**: ✅ PASSED
+- **Key improvements**:
+  - Fixed `migrate:fresh` to actually drop all tables
+  - Simplified Makefile (no more ARGS dependency for default migrations)
+  - Complete SeedPlus with all reference data
+  - SeedE as alias for SeedPlus
+  - New SeedHQ for HQ client installations (mirrors Laravel AddDatabaseSeeder)
+
+**Status**: ✅ POST-PHASE 2 COMPLETE & PRODUCTION-READY
+
